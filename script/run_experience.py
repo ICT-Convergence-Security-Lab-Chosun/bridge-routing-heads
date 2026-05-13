@@ -16,18 +16,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = [
     # "python script/step2_evaluate_multilingual.py --model meta-llama/Llama-3.1-70B --model-short llama31_70",
     # "python script/step2_evaluate_multilingual.py --model Qwen/Qwen2.5-72B --model-short qwen25_72",
-    "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type attn",
-    "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type mlp",
-    "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type attn",
-    "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type mlp",
+    # "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type attn",
+
+    # "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type mlp", # ja -> es 부터 다시 시작해야 함
+    # "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type attn",
+    # "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type mlp",
+
     # "python script/step3_filter_multilingual.py --model-short llama31_70",
     # "python script/step3_filter_multilingual.py --model-short qwen25_72",
     # "python script/step5_BridgeHead_Ablation_Patchscopes.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es --stage attention",
     # "python script/step5_BridgeHead_Ablation_Patchscopes.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es --stage all",
     # "python script/step5_BridgeHead_Ablation_Patchscopes.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es --stage all",
     # "python script/step5_BridgeHead_Ablation_Patchscopes.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es --stage all",
-    # "python script/step6_Bridge_Head_validation.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es --stage ablation",
-    # "python script/step6_Bridge_Head_validation.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es --stage ablation",
+    "python script/extra/extra_1_suppressor_ablation.py",
+    "python script/step6_Bridge_Head_validation.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es --stage ablation",
+    "python script/step6_Bridge_Head_validation.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es --stage ablation",   
 ]
 
 

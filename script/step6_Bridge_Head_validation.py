@@ -270,6 +270,28 @@ def _summary_stats(values: list[float]) -> dict[str, float]:
     return {"mean": float(arr.mean()), "std": float(arr.std()), "n": len(arr)}
 
 
+def bootstrap_ci(
+    values: list[float],
+    n_boot: int = 1000,
+    ci: float = 0.95,
+    seed: int = 42,
+) -> tuple[float, float]:
+    """Bootstrap percentile CI for the mean. Returns (ci_lo, ci_hi)."""
+    if len(values) < 2:
+        return float("nan"), float("nan")
+    arr = np.array(values, dtype=np.float64)
+    rng_np = np.random.default_rng(seed)
+    boot_means = np.array([
+        rng_np.choice(arr, size=len(arr), replace=True).mean()
+        for _ in range(n_boot)
+    ])
+    alpha = (1.0 - ci) / 2.0
+    return (
+        float(np.percentile(boot_means, alpha * 100)),
+        float(np.percentile(boot_means, (1.0 - alpha) * 100)),
+    )
+
+
 def _ablation_nlls(
     model,
     tokenizer,
@@ -277,14 +299,26 @@ def _ablation_nlls(
     head_set: list[tuple[int, int]],
     mean_values: dict[tuple[int, int], float],
     mask_mgr: HeadMaskManager,
-) -> list[float]:
+) -> tuple[list[float], list[dict[str, Any]]]:
+    """Ablate head_set on all items. Returns (ablated_nlls, per_item_records).
+
+    per_item_records entries: {id, nll_base, nll_ablated, delta}
+    """
     nlls: list[float] = []
+    per_item: list[dict[str, Any]] = []
     for item in items:
         mask_mgr.reset_masks()
         mask_mgr.apply_head_set_ablation(head_set, mean_values)
-        nlls.append(compute_nll_eval(model, tokenizer, item["prompt"], item["gold"]))
+        nll_a = compute_nll_eval(model, tokenizer, item["prompt"], item["gold"])
+        nlls.append(nll_a)
+        per_item.append({
+            "id": item["id"],
+            "nll_base": item["nll_base"],
+            "nll_ablated": nll_a,
+            "delta": nll_a - item["nll_base"],
+        })
     mask_mgr.reset_masks()
-    return nlls
+    return nlls, per_item
 
 
 def run_mean_ablation(
@@ -361,9 +395,18 @@ def run_mean_ablation(
                 k = len(head_set)
 
                 # Bridge head ablation
-                bth_nlls = _ablation_nlls(model, tokenizer, items, head_set, mean_values, mask_mgr)
-                delta_bth = [a - b for a, b in zip(bth_nlls, base_nlls)]
+                bth_nlls, bth_per_item = _ablation_nlls(
+                    model, tokenizer, items, head_set, mean_values, mask_mgr
+                )
+                delta_bth = [x["delta"] for x in bth_per_item]
                 bth_stats = _summary_stats(delta_bth)
+                bth_ci_lo, bth_ci_hi = bootstrap_ci(delta_bth, seed=args.seed)
+
+                # Save per-item NLL for bridge head ablation
+                _save_results(
+                    bth_per_item,
+                    out_dir / f"ablation_per_item_{lang}_{head_set_type}_bth",
+                )
 
                 results.append({
                     "model": args.model_short,
@@ -377,17 +420,30 @@ def run_mean_ablation(
                     "intervened_nll_mean": float(np.mean(bth_nlls)),
                     "delta_nll_mean": bth_stats["mean"],
                     "delta_nll_std": bth_stats["std"],
+                    "delta_nll_ci_lo": bth_ci_lo,
+                    "delta_nll_ci_hi": bth_ci_hi,
                 })
 
                 # Random baseline (same k, --random-repeat repeats)
                 rand_deltas: list[float] = []
-                for _ in range(args.random_repeat):
+                rand_per_item_all: list[dict[str, Any]] = []
+                for repeat_i in range(args.random_repeat):
                     rand_set = rng.sample(all_heads, k=min(k, len(all_heads)))
-                    r_nlls = _ablation_nlls(
+                    r_nlls, r_per_item = _ablation_nlls(
                         model, tokenizer, items, rand_set, mean_values, mask_mgr
                     )
-                    rand_deltas.extend([a - b for a, b in zip(r_nlls, base_nlls)])
+                    rand_deltas.extend([x["delta"] for x in r_per_item])
+                    rand_per_item_all.extend(
+                        [{**x, "repeat": repeat_i} for x in r_per_item]
+                    )
                 rand_stats = _summary_stats(rand_deltas)
+                rand_ci_lo, rand_ci_hi = bootstrap_ci(rand_deltas, seed=args.seed)
+
+                # Save per-item NLL for random baseline
+                _save_results(
+                    rand_per_item_all,
+                    out_dir / f"ablation_per_item_{lang}_{head_set_type}_random",
+                )
 
                 results.append({
                     "model": args.model_short,
@@ -401,11 +457,16 @@ def run_mean_ablation(
                     "intervened_nll_mean": base_nll_mean + rand_stats["mean"],
                     "delta_nll_mean": rand_stats["mean"],
                     "delta_nll_std": rand_stats["std"],
+                    "delta_nll_ci_lo": rand_ci_lo,
+                    "delta_nll_ci_hi": rand_ci_hi,
                 })
 
                 logger.info(
-                    "lang=%-4s  type=%-8s  k=%d  BTH_delta=%.4f  rand_delta=%.4f",
-                    lang, head_set_type, k, bth_stats["mean"], rand_stats["mean"],
+                    "lang=%-4s  type=%-8s  k=%d  "
+                    "BTH_delta=%.4f [%.4f, %.4f]  rand_delta=%.4f [%.4f, %.4f]",
+                    lang, head_set_type, k,
+                    bth_stats["mean"], bth_ci_lo, bth_ci_hi,
+                    rand_stats["mean"], rand_ci_lo, rand_ci_hi,
                 )
 
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -600,6 +600,283 @@ def _run_pearson(cfg: dict) -> None:
 
 
 # ============================================================
+# Viz 5 — step4_bhs_per_lang  (per-language static heatmap + cell marker overlay)
+# ============================================================
+
+CONFIGS["step4_bhs_per_lang"] = {
+    "models":     ["llama31_70", "qwen25_72"],
+    "input_root": PROJECT_ROOT / "output" / "step4_filtering_Bridge_head_Score",
+    "formula":    "fh+th-sh",
+    "langs":      ["en", "ko", "zh", "ja", "es"],
+    "metric":     "BHS",           # BHS | z_FH | z_TH | z_SH
+    # Blue -> light -> red/orange is a common, intuitive paper palette.
+    # Good alternatives: coolwarm, RdBu_r, Spectral_r.
+    "colormap":   "RdYlBu_r",
+    # percentile clipping for color range (enhances contrast)
+    "clip_lo_pct": 5.0,            # lower percentile → vmin
+    "clip_hi_pct": 99.0,           # upper percentile → vmax
+    # Bridge heads are shown by filling/marking the full heatmap cell.
+    # cell_marker_fill: contrast | black | white | none
+    "cell_marker_fill": "white",
+    "cell_marker_fill_alpha": 0.8,
+    "cell_outline_color": "#111111",
+    "cell_outline_lw": 0.75,
+    "cell_outline_alpha": 0.95,
+    "show_suptitle": False,
+    "show_note": True,
+    # panel dimensions in inches (width per panel in 2×3 grid)
+    "panel_w_in": 3.2,
+}
+
+
+def _load_bhs_per_lang_data(cfg: dict) -> tuple[dict, dict]:
+    """Load BHS score matrices and head sets from head_sets.json.
+
+    Returns
+    -------
+    (data, head_sets)
+        data : {lang: {matrix, n_layers, n_heads, specific_heads, general_heads}}
+        head_sets : raw dict from head_sets.json
+    """
+    root = cfg["input_root"] / cfg["model_short"] / cfg["formula"]
+    hs_path = root / "head_sets.json"
+    head_sets: dict = json.loads(hs_path.read_text()) if hs_path.exists() else {}
+
+    general_set: set[tuple[int, int]] = {
+        (h["layer"], h["head"]) for h in head_sets.get("H_Bridge_General", [])
+    }
+
+    data: dict = {}
+    metric = cfg.get("metric", "BHS")
+    for lang in cfg["langs"]:
+        path = root / lang / f"bridge_scores_{lang}.jsonl"
+        if not path.exists():
+            continue
+        recs: dict[tuple[int, int], dict] = {}
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                r = json.loads(line)
+                recs[(r["layer"], r["head"])] = r
+        if not recs:
+            continue
+        n_layers = max(k[0] for k in recs) + 1
+        n_heads  = max(k[1] for k in recs) + 1
+        mat = [[0.0] * n_heads for _ in range(n_layers)]
+        for (layer, head), rec in recs.items():
+            mat[layer][head] = float(rec.get(metric, 0.0))
+
+        lang_up = lang.upper()
+        specific_heads = [
+            (h["layer"], h["head"])
+            for h in head_sets.get(f"H_Bridge_Specific_{lang_up}", [])
+        ]
+        lang_heads = [
+            (h["layer"], h["head"])
+            for h in head_sets.get(f"H_Bridge_{lang_up}", [])
+        ]
+        data[lang] = {
+            "matrix":         mat,
+            "n_layers":       n_layers,
+            "n_heads":        n_heads,
+            "specific_heads": specific_heads,
+            "lang_heads":     lang_heads,   # top-K full set (general ∪ specific)
+            "general_heads":  list(general_set),
+        }
+        print(
+            f"  [{lang}] {n_layers}L × {n_heads}H  |  "
+            f"top-K={len(lang_heads)}  specific={len(specific_heads)}  "
+            f"general={len(general_set)}"
+        )
+    return data, head_sets
+
+
+def _save_bhs_per_lang_static(data: dict, cfg: dict, slug: str) -> None:
+    """Save BHS heatmap: 2×3 grid with GENERAL panel + 5 per-language panels.
+
+    Layout
+    ------
+      Row 0 : GENERAL  |  EN  |  KO
+      Row 1 : ZH       |  JA  |  ES
+
+    GENERAL panel shows BHS averaged across all available languages.
+    Color range is shared across panels with robust percentile clipping.
+    Markers: filled cells = bridge heads
+             (General panel: cross-lingual | Lang panels: lang-exclusive specific)
+    """
+    if not _HAS_MPL or not _HAS_NUMPY:
+        print("  matplotlib/numpy not available — skipping")
+        return
+    from matplotlib.patches import Rectangle
+
+    langs = [l for l in cfg["langs"] if l in data]
+    if not langs:
+        return
+
+    _mpl_pub_style()
+    metric    = cfg.get("metric", "BHS")
+    cmap_name = cfg.get("colormap", "RdYlBu_r")
+    panel_w   = cfg.get("panel_w_in", 3.2)
+    marker_fill = str(cfg.get("cell_marker_fill", "contrast")).lower()
+    marker_fill_alpha = cfg.get("cell_marker_fill_alpha", 0.42)
+    outline_color = cfg.get("cell_outline_color", "#111111")
+    outline_lw    = cfg.get("cell_outline_lw", 0.75)
+    outline_alpha = cfg.get("cell_outline_alpha", 0.95)
+    show_suptitle = cfg.get("show_suptitle", False)
+    show_note = cfg.get("show_note", True)
+    clip_lo   = cfg.get("clip_lo_pct", 5.0)
+    clip_hi   = cfg.get("clip_hi_pct", 99.0)
+
+    info0    = data[langs[0]]
+    n_layers = info0["n_layers"]
+    n_heads  = info0["n_heads"]
+    general_heads = info0["general_heads"]   # identical across langs
+
+    # ── GENERAL panel: BHS averaged across all languages ─────────────────
+    all_mats = [np.array(data[l]["matrix"], dtype=float) for l in langs]
+    gen_mat  = np.mean(all_mats, axis=0)
+
+    # ── Build ordered panel list for 2×3 grid ────────────────────────────
+    # Each entry: (title, matrix, own_heads)
+    #   GENERAL  → general heads marked
+    #   per-lang → that language's specific heads only
+    lang_order = [l for l in ["en", "ko", "zh", "ja", "es"] if l in data]
+    panels: list[tuple | None] = [
+        ("General Bridge Head", gen_mat, general_heads),
+    ]
+    for l in lang_order:
+        info = data[l]
+        panels.append((
+            f"{l.upper()} Bridge Head",
+            np.array(info["matrix"], dtype=float),
+            info["specific_heads"],
+        ))
+    while len(panels) < 6:
+        panels.append(None)
+
+    # ── Shared robust color range keeps panels comparable while suppressing outliers.
+    all_panel_values = [gen_mat.flatten()]
+    all_panel_values.extend(np.array(data[l]["matrix"], dtype=float).flatten() for l in lang_order)
+    flat_all = np.concatenate(all_panel_values)
+    vmin = float(np.percentile(flat_all, clip_lo))
+    vmax = float(np.percentile(flat_all, clip_hi))
+    if vmax <= vmin:
+        vmax = vmin + 1e-9
+
+    cmap = plt.get_cmap(cmap_name)
+
+    def marker_color(value: float) -> str | None:
+        """Return a high-contrast marker fill for this heatmap value."""
+        if marker_fill in {"none", "false", "off"}:
+            return None
+        if marker_fill in {"black", "#000000"}:
+            return "#111111"
+        if marker_fill in {"white", "#ffffff"}:
+            return "#ffffff"
+        t = min(1.0, max(0.0, (float(value) - vmin) / (vmax - vmin)))
+        r, g, b, _ = cmap(t)
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return "#111111" if luminance > 0.55 else "#ffffff"
+
+    # ── Figure layout ─────────────────────────────────────────────────────
+    panel_h = panel_w * (n_layers / n_heads)
+    fig, axes = plt.subplots(
+        2, 3,
+        figsize=(panel_w * 3 + 1.35, panel_h * 2 + 1.55),
+    )
+    fig.subplots_adjust(
+        left=0.06, right=0.90, bottom=0.12, top=0.90,
+        wspace=0.28, hspace=0.42,
+    )
+
+    head_step  = max(8, 8 * round(max(1, n_heads  // 64)))
+    layer_step = max(8, 8 * round(max(1, n_layers // 80)))
+
+    GRID = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]
+    for idx, (row, col) in enumerate(GRID):
+        ax = axes[row][col]
+        if idx >= len(panels) or panels[idx] is None:
+            ax.axis("off")
+            continue
+        label, mat, own_heads = panels[idx]
+
+        im = ax.imshow(
+            mat, aspect="auto", cmap=cmap_name,
+            origin="upper", interpolation="nearest",
+            vmin=vmin, vmax=vmax,
+        )
+
+        # Show only this panel's own bridge heads by filling/marking the whole cell.
+        if own_heads:
+            for layer, head in own_heads:
+                fill_color = marker_color(mat[layer, head])
+                ax.add_patch(Rectangle(
+                    (head - 0.5, layer - 0.5), 1, 1,
+                    fill=fill_color is not None,
+                    facecolor=fill_color if fill_color is not None else "none",
+                    edgecolor=outline_color,
+                    linewidth=outline_lw,
+                    alpha=marker_fill_alpha if fill_color is not None else outline_alpha,
+                    joinstyle="miter",
+                    zorder=5,
+                ))
+                if fill_color is not None:
+                    ax.add_patch(Rectangle(
+                        (head - 0.5, layer - 0.5), 1, 1,
+                        fill=False,
+                        edgecolor=outline_color,
+                        linewidth=outline_lw,
+                        alpha=outline_alpha,
+                        joinstyle="miter",
+                        zorder=6,
+                    ))
+
+        ax.set_title(label, fontsize=10.5, fontweight="bold",
+                     pad=5, color="#111111")
+        ax.set_xlabel("Head", fontsize=8.5, labelpad=2)
+        if col == 0:
+            ax.set_ylabel("Layer", fontsize=8.5, labelpad=2)
+        ax.set_xticks(range(0, n_heads,  head_step))
+        ax.set_yticks(range(0, n_layers, layer_step))
+        ax.tick_params(axis="both", labelsize=7)
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.7)
+            spine.set_color("#333333")
+
+    # ── Shared colorbar + compact annotation ─────────────────────────────
+    cax = fig.add_axes([0.925, 0.20, 0.018, 0.60])
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(metric, fontsize=9)
+    cbar.ax.tick_params(labelsize=7)
+
+    if show_note:
+        fig.text(0.5, 0.035, "Filled cells indicate bridge heads.",
+                 ha="center", va="center", fontsize=8.5, color="#222222")
+
+    if show_suptitle:
+        model   = cfg["model_short"]
+        formula = cfg.get("formula", "")
+        fig.suptitle(
+            f"Bridge Head Score ({metric})  —  {model}  [{formula}]  "
+            f"(shared {clip_lo:.0f}–{clip_hi:.0f}th percentile color range)",
+            fontsize=10.5, y=0.985,
+        )
+    _save_fig(fig, slug)
+    plt.close(fig)
+    print(f"  Heatmap saved: {slug}")
+
+
+def _run_bhs_per_lang(cfg: dict) -> None:
+    for model in cfg["models"]:
+        print(f"[step4_bhs_per_lang] model={model}")
+        m_cfg = {**cfg, "model_short": model}
+        data, _ = _load_bhs_per_lang_data(m_cfg)
+        if not data:
+            print("  No data found — skipping.")
+            continue
+        _save_bhs_per_lang_static(data, m_cfg, f"step4_bhs_per_lang_{model}")
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -612,6 +889,8 @@ def main() -> None:
                    help="Attention heatmap (stage2.5) — HTML only")
     p.add_argument("--step4_bhs", action="store_true",
                    help="Bridge Head Score layer x head heatmap (step4) — HTML + PNG/PDF")
+    p.add_argument("--step4_bhs_per_lang", action="store_true",
+                   help="Per-language BHS heatmap with bridge-head cell outlines — PNG/PDF")
     p.add_argument("--step5_stage2_ablation", action="store_true",
                    help="Mean ablation delta bar chart (stage2) — HTML + PNG/PDF")
     p.add_argument("--step2_5_pearson", action="store_true",
@@ -623,6 +902,7 @@ def main() -> None:
     any_selected = (
         args.step5_stage2_5_attention
         or args.step4_bhs
+        or args.step4_bhs_per_lang
         or args.step5_stage2_ablation
         or args.step2_5_pearson
     )
@@ -635,6 +915,9 @@ def main() -> None:
 
     if run_all or args.step4_bhs:
         _run_bhs(CONFIGS["step4_bhs"])
+
+    if run_all or args.step4_bhs_per_lang:
+        _run_bhs_per_lang(CONFIGS["step4_bhs_per_lang"])
 
     if run_all or args.step5_stage2_ablation:
         _run_ablation(CONFIGS["step5_stage2_ablation"])

@@ -9,8 +9,9 @@ Stage 1 -- Jaccard overlap analysis
     No model needed.
 
 Stage 2 -- Mean ablation
-    Calibration: 50 correct two-hop prompts x (en + target langs) -> mean head outputs.
-    Test: 30 correct records per language, ablate general set and specific set separately.
+    Calibration: 50 correct two-hop prompts x (en + ko/ja/zh/es) -> mean head outputs.
+    Gold for NLL: clean span extracted from eval.two_hop_pred.
+    Test: 100 correct records per language, ablate general set and specific set separately.
     Compare against random-sampled head set of equal size (20 repeats).
 
 Stage 3 -- Scaling amplification
@@ -63,7 +64,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "script"))
 from utils.common import load_json, save_json, set_seed, setup_logging
 from utils.model_utils import check_answer, load_model_and_tokenizer, predict_next_tokens
 from utils.prompt_utils import wrap_prompt
-from utils.bridge_utils import load_filtered_records, sample_records
+from utils.bridge_utils import extract_answer_span, load_filtered_records, sample_records
 from utils.head_hooks import (
     HeadMaskManager,
     _get_head_dim,
@@ -85,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model-short", required=True)
     p.add_argument("--model", required=True)
     p.add_argument("--langs", nargs="+", default=["ko", "zh", "ja", "es"],
-                   help="Target languages (en is included automatically in calibration).")
+                   help="Target languages for validation. Calibration always uses en, ko, ja, zh, es.")
     p.add_argument("--input-root", type=Path, default=PROJECT_ROOT / "data")
     p.add_argument("--step5-root", type=Path,
                    default=PROJECT_ROOT / "output" / "step5_BridgeHead_Ablation_Patchscopes",
@@ -248,13 +249,14 @@ def _collect_valid_items_ablation(
     model,
     tokenizer,
     records: list[dict],
+    gold_mode: str = "first_span",
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for record in records:
-        labels = _gold_labels(record)
-        if not labels:
+        raw_pred = record.get("eval", {}).get("two_hop_pred", "")
+        gold = extract_answer_span(raw_pred, mode=gold_mode, tokenizer=tokenizer)
+        if not gold:
             continue
-        gold = labels[0]
         prompt = wrap_prompt(record["prompts"]["two_hop"], record["lang"])
         nll_base = compute_nll_eval(model, tokenizer, prompt, gold)
         if math.isnan(nll_base):
@@ -337,8 +339,10 @@ def run_mean_ablation(
     all_heads = _all_model_heads(model)
 
     # Calibration: gather mean head outputs from correct two-hop prompts
-    # 50 per lang x (en + --langs) = up to 250 prompts
-    calib_langs = ["en"] + [l for l in args.langs if l != "en"]
+    # 50 per lang x (en + ko/ja/zh/es) = up to 250 prompts.
+    # Keep this fixed across validation runs so mean ablation uses the same
+    # multilingual calibration distribution even when --langs is a subset.
+    calib_langs = ["en", "ko", "ja", "zh", "es"]
     calib_prompts: list[str] = []
     for clang in calib_langs:
         try:
@@ -371,7 +375,7 @@ def run_mean_ablation(
                 logger.warning("Ablation: correct records not found for lang=%s -- skipping.", lang)
                 continue
             records = sample_records(records, args.ablation_sample_size, args.seed)
-            items = _collect_valid_items_ablation(model, tokenizer, records)
+            items = _collect_valid_items_ablation(model, tokenizer, records, args.gold_mode)
             logger.info("Ablation lang=%s: %d/%d valid items.", lang, len(items), len(records))
             if not items:
                 continue

@@ -1,0 +1,77 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ============================================================
+# Virtual environment
+# ============================================================
+env_multilingual_hop/
+venv/
+.venv/
+env/
+
+# ============================================================
+# Experiment logs
+# ============================================================
+logs/
+
+# ============================================================
+# outputs
+# ============================================================
+output/
+output_backup/
+output_backup2/
+
+# ============================================================
+# Large data files
+# Processed multilingual JSONs are ~95 MB each (653 MB total).
+# Use Git LFS or upload to HuggingFace Datasets instead.
+# ============================================================
+data/processed/
+data/processed_backup/
+data/processed_backup2/
+
+# Per-model inference results (eval / filtered outputs)
+data/llama31_70/
+data/qwen25_72/
+
+# Wikidata API cache (regeneratable via step1)
+data/wikidata_cache/
+
+# ============================================================
+# Deprecated / scratch scripts
+# ============================================================
+script/not_use/
+script/__pycache__/
+
+# ============================================================
+# OS / editor artifacts
+# ============================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================================
+# Credentials / secrets
+# ============================================================
+.env
+*.key
+*.pem

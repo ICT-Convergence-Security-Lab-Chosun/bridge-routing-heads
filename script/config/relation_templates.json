@@ -1,0 +1,1075 @@
+{
+  "country of citizenship": {
+    "en": {
+      "single": "The country of citizenship of {e} is",
+      "embed": "the country of citizenship of",
+      "r_phrase": "country of citizenship"
+    },
+    "ko": {
+      "single": "{e}의 국적은",
+      "r_noun": "국적",
+      "particle": "은"
+    },
+    "zh": {
+      "single": "{e}的国籍是",
+      "r_noun": "国籍"
+    },
+    "es": {
+      "single": "El país de ciudadanía de {e} es",
+      "object": "el país de ciudadanía de {e}",
+      "r_noun": "país de ciudadanía"
+    },
+    "ja": {
+      "single": "{e}の国籍国は",
+      "r_noun": "国籍国"
+    },
+    "id": {
+      "single": "Negara kewarganegaraan dari {e} adalah",
+      "object": "negara kewarganegaraan dari {e}",
+      "r_noun": "negara kewarganegaraan"
+    },
+    "vi": {
+      "single": "Quốc tịch của {e} là",
+      "r_noun": "quốc tịch"
+    },
+    "hi": {
+      "r_noun": "नागरिकता देश"
+    }
+  },
+  "spouse": {
+    "en": {
+      "single": "The spouse of {e} is",
+      "embed": "the spouse of",
+      "r_phrase": "spouse"
+    },
+    "ko": {
+      "single": "{e}의 배우자는",
+      "r_noun": "배우자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的配偶是",
+      "r_noun": "配偶"
+    },
+    "es": {
+      "single": "El cónyuge de {e} es",
+      "object": "el cónyuge de {e}",
+      "r_noun": "cónyuge"
+    },
+    "ja": {
+      "single": "{e}の配偶者は",
+      "r_noun": "配偶者"
+    },
+    "id": {
+      "single": "Pasangan dari {e} adalah",
+      "object": "pasangan dari {e}",
+      "r_noun": "pasangan"
+    },
+    "vi": {
+      "single": "Vợ/chồng của {e} là",
+      "r_noun": "vợ/chồng"
+    },
+    "hi": {
+      "r_noun": "जीवनसाथी"
+    }
+  },
+  "father": {
+    "en": {
+      "single": "The father of {e} is",
+      "embed": "the father of",
+      "r_phrase": "father"
+    },
+    "ko": {
+      "single": "{e}의 아버지는",
+      "r_noun": "아버지",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的父亲是",
+      "r_noun": "父亲"
+    },
+    "es": {
+      "single": "El padre de {e} es",
+      "object": "el padre de {e}",
+      "r_noun": "padre"
+    },
+    "ja": {
+      "single": "{e}の父は",
+      "r_noun": "父"
+    },
+    "id": {
+      "single": "Ayah dari {e} adalah",
+      "object": "ayah dari {e}",
+      "r_noun": "ayah"
+    },
+    "vi": {
+      "single": "Cha của {e} là",
+      "r_noun": "cha"
+    },
+    "hi": {
+      "r_noun": "पिता"
+    }
+  },
+  "mother": {
+    "en": {
+      "single": "The mother of {e} is",
+      "embed": "the mother of",
+      "r_phrase": "mother"
+    },
+    "ko": {
+      "single": "{e}의 어머니는",
+      "r_noun": "어머니",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的母亲是",
+      "r_noun": "母亲"
+    },
+    "es": {
+      "single": "La madre de {e} es",
+      "object": "la madre de {e}",
+      "r_noun": "madre"
+    },
+    "ja": {
+      "single": "{e}の母は",
+      "r_noun": "母"
+    },
+    "id": {
+      "single": "Ibu dari {e} adalah",
+      "object": "ibu dari {e}",
+      "r_noun": "ibu"
+    },
+    "vi": {
+      "single": "Mẹ của {e} là",
+      "r_noun": "mẹ"
+    },
+    "hi": {
+      "r_noun": "माता"
+    }
+  },
+  "capital": {
+    "en": {
+      "single": "The capital of {e} is",
+      "embed": "the capital of",
+      "r_phrase": "capital"
+    },
+    "ko": {
+      "single": "{e}의 수도는",
+      "r_noun": "수도",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的首都是",
+      "r_noun": "首都"
+    },
+    "es": {
+      "single": "La capital de {e} es",
+      "object": "la capital de {e}",
+      "r_noun": "capital"
+    },
+    "ja": {
+      "single": "{e}の首都は",
+      "r_noun": "首都"
+    },
+    "id": {
+      "single": "Ibu kota dari {e} adalah",
+      "object": "ibu kota dari {e}",
+      "r_noun": "ibu kota"
+    },
+    "vi": {
+      "single": "Thủ đô của {e} là",
+      "r_noun": "thủ đô"
+    },
+    "hi": {
+      "r_noun": "राजधानी"
+    }
+  },
+  "currency": {
+    "en": {
+      "single": "The currency of {e} is",
+      "embed": "the currency of",
+      "r_phrase": "currency"
+    },
+    "ko": {
+      "single": "{e}의 통화는",
+      "r_noun": "통화",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的货币是",
+      "r_noun": "货币"
+    },
+    "es": {
+      "single": "La moneda de {e} es",
+      "object": "la moneda de {e}",
+      "r_noun": "moneda"
+    },
+    "ja": {
+      "single": "{e}の通貨は",
+      "r_noun": "通貨"
+    },
+    "id": {
+      "single": "Mata uang dari {e} adalah",
+      "object": "mata uang dari {e}",
+      "r_noun": "mata uang"
+    },
+    "vi": {
+      "single": "Tiền tệ của {e} là",
+      "r_noun": "tiền tệ"
+    },
+    "hi": {
+      "r_noun": "मुद्रा"
+    }
+  },
+  "central bank": {
+    "en": {
+      "single": "The central bank of {e} is",
+      "embed": "the central bank of",
+      "r_phrase": "central bank"
+    },
+    "ko": {
+      "single": "{e}의 중앙은행은",
+      "r_noun": "중앙은행",
+      "particle": "은"
+    },
+    "zh": {
+      "single": "{e}的中央银行是",
+      "r_noun": "中央银行"
+    },
+    "es": {
+      "single": "El banco central de {e} es",
+      "object": "el banco central de {e}",
+      "r_noun": "banco central"
+    },
+    "ja": {
+      "single": "{e}の中央銀行は",
+      "r_noun": "中央銀行"
+    },
+    "id": {
+      "single": "Bank sentral dari {e} adalah",
+      "object": "bank sentral dari {e}",
+      "r_noun": "bank sentral"
+    },
+    "vi": {
+      "single": "Ngân hàng trung ương của {e} là",
+      "r_noun": "ngân hàng trung ương"
+    },
+    "hi": {
+      "r_noun": "केंद्रीय बैंक"
+    }
+  },
+  "anthem": {
+    "en": {
+      "single": "The national anthem of {e} is",
+      "embed": "the national anthem of",
+      "r_phrase": "anthem"
+    },
+    "ko": {
+      "single": "{e}의 국가는",
+      "r_noun": "국가",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的国歌是",
+      "r_noun": "国歌"
+    },
+    "es": {
+      "single": "El himno nacional de {e} es",
+      "object": "el himno nacional de {e}",
+      "r_noun": "himno nacional"
+    },
+    "ja": {
+      "single": "{e}の国歌は",
+      "r_noun": "国歌"
+    },
+    "id": {
+      "single": "Lagu kebangsaan dari {e} adalah",
+      "object": "lagu kebangsaan dari {e}",
+      "r_noun": "lagu kebangsaan"
+    },
+    "vi": {
+      "single": "Quốc ca của {e} là",
+      "r_noun": "quốc ca"
+    },
+    "hi": {
+      "r_noun": "राष्ट्रगान"
+    }
+  },
+  "composer": {
+    "en": {
+      "single": "The composer of {e} is",
+      "embed": "the composer of",
+      "r_phrase": "composer"
+    },
+    "ko": {
+      "single": "{e}의 작곡가는",
+      "r_noun": "작곡가",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的作曲者是",
+      "r_noun": "作曲者"
+    },
+    "es": {
+      "single": "El compositor de {e} es",
+      "object": "el compositor de {e}",
+      "r_noun": "compositor"
+    },
+    "ja": {
+      "single": "{e}の作曲者は",
+      "r_noun": "作曲者"
+    },
+    "id": {
+      "single": "Komponis dari {e} adalah",
+      "object": "komponis dari {e}",
+      "r_noun": "komponis"
+    },
+    "vi": {
+      "single": "Nhà soạn nhạc của {e} là",
+      "r_noun": "nhà soạn nhạc"
+    },
+    "hi": {
+      "r_noun": "संगीतकार"
+    }
+  },
+  "performer": {
+    "en": {
+      "single": "The performer of {e} is",
+      "embed": "the performer of",
+      "r_phrase": "performer"
+    },
+    "ko": {
+      "single": "{e}의 연주자는",
+      "r_noun": "연주자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的演奏者是",
+      "r_noun": "演奏者"
+    },
+    "es": {
+      "single": "El intérprete de {e} es",
+      "object": "el intérprete de {e}",
+      "r_noun": "intérprete"
+    },
+    "ja": {
+      "single": "{e}の演奏者は",
+      "r_noun": "演奏者"
+    },
+    "id": {
+      "single": "Penampil dari {e} adalah",
+      "object": "penampil dari {e}",
+      "r_noun": "penampil"
+    },
+    "vi": {
+      "single": "Người biểu diễn của {e} là",
+      "r_noun": "người biểu diễn"
+    },
+    "hi": {
+      "r_noun": "कलाकार"
+    }
+  },
+  "location of formation": {
+    "en": {
+      "single": "The location of formation of {e} is",
+      "embed": "the location of formation of",
+      "r_phrase": "location of formation"
+    },
+    "ko": {
+      "single": "{e}의 결성지는",
+      "r_noun": "결성지",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的成立地点是",
+      "r_noun": "成立地点"
+    },
+    "es": {
+      "single": "El lugar de formación de {e} es",
+      "object": "el lugar de formación de {e}",
+      "r_noun": "lugar de formación"
+    },
+    "ja": {
+      "single": "{e}の結成地は",
+      "r_noun": "結成地"
+    },
+    "id": {
+      "single": "Tempat pembentukan dari {e} adalah",
+      "object": "tempat pembentukan dari {e}",
+      "r_noun": "tempat pembentukan"
+    },
+    "vi": {
+      "single": "Nơi thành lập của {e} là",
+      "r_noun": "nơi thành lập"
+    },
+    "hi": {
+      "r_noun": "गठन स्थान"
+    }
+  },
+  "notable work": {
+    "en": {
+      "single": "The most notable work of {e} is",
+      "embed": "the most notable work of",
+      "r_phrase": "notable work"
+    },
+    "ko": {
+      "single": "{e}의 대표작은",
+      "r_noun": "대표작",
+      "particle": "은"
+    },
+    "zh": {
+      "single": "{e}的代表作是",
+      "r_noun": "代表作"
+    },
+    "es": {
+      "single": "La obra más notable de {e} es",
+      "object": "la obra más notable de {e}",
+      "r_noun": "obra más notable"
+    },
+    "ja": {
+      "single": "{e}の代表作は",
+      "r_noun": "代表作"
+    },
+    "id": {
+      "single": "Karya terkenal dari {e} adalah",
+      "object": "karya terkenal dari {e}",
+      "r_noun": "karya terkenal"
+    },
+    "vi": {
+      "single": "Tác phẩm tiêu biểu của {e} là",
+      "r_noun": "tác phẩm tiêu biểu"
+    },
+    "hi": {
+      "r_noun": "प्रमुख कृति"
+    }
+  },
+  "record label": {
+    "en": {
+      "single": "The record label of {e} is",
+      "embed": "the record label of",
+      "r_phrase": "record label"
+    },
+    "ko": {
+      "single": "{e}의 음반사는",
+      "r_noun": "음반사",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的唱片公司是",
+      "r_noun": "唱片公司"
+    },
+    "es": {
+      "single": "El sello discográfico de {e} es",
+      "object": "el sello discográfico de {e}",
+      "r_noun": "sello discográfico"
+    },
+    "ja": {
+      "single": "{e}のレコードレーベルは",
+      "r_noun": "レコードレーベル"
+    },
+    "id": {
+      "single": "Label rekaman dari {e} adalah",
+      "object": "label rekaman dari {e}",
+      "r_noun": "label rekaman"
+    },
+    "vi": {
+      "single": "Hãng thu âm của {e} là",
+      "r_noun": "hãng thu âm"
+    },
+    "hi": {
+      "r_noun": "रिकॉर्ड लेबल"
+    }
+  },
+  "director": {
+    "en": {
+      "single": "The director of {e} is",
+      "embed": "the director of",
+      "r_phrase": "director"
+    },
+    "ko": {
+      "single": "{e}의 감독은",
+      "r_noun": "감독",
+      "particle": "은"
+    },
+    "zh": {
+      "single": "{e}的导演是",
+      "r_noun": "导演"
+    },
+    "es": {
+      "single": "El director de {e} es",
+      "object": "el director de {e}",
+      "r_noun": "director"
+    },
+    "ja": {
+      "single": "{e}の監督は",
+      "r_noun": "監督"
+    },
+    "id": {
+      "single": "Sutradara dari {e} adalah",
+      "object": "sutradara dari {e}",
+      "r_noun": "sutradara"
+    },
+    "vi": {
+      "single": "Đạo diễn của {e} là",
+      "r_noun": "đạo diễn"
+    },
+    "hi": {
+      "r_noun": "निर्देशक"
+    }
+  },
+  "producer": {
+    "en": {
+      "single": "The producer of {e} is",
+      "embed": "the producer of",
+      "r_phrase": "producer"
+    },
+    "ko": {
+      "single": "{e}의 제작자는",
+      "r_noun": "제작자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的制片人是",
+      "r_noun": "制片人"
+    },
+    "es": {
+      "single": "El productor de {e} es",
+      "object": "el productor de {e}",
+      "r_noun": "productor"
+    },
+    "ja": {
+      "single": "{e}のプロデューサーは",
+      "r_noun": "プロデューサー"
+    },
+    "id": {
+      "single": "Produser dari {e} adalah",
+      "object": "produser dari {e}",
+      "r_noun": "produser"
+    },
+    "vi": {
+      "single": "Nhà sản xuất của {e} là",
+      "r_noun": "nhà sản xuất"
+    },
+    "hi": {
+      "r_noun": "निर्माता"
+    }
+  },
+  "screenwriter": {
+    "en": {
+      "single": "The screenwriter of {e} is",
+      "embed": "the screenwriter of",
+      "r_phrase": "screenwriter"
+    },
+    "ko": {
+      "single": "{e}의 각본가는",
+      "r_noun": "각본가",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的编剧是",
+      "r_noun": "编剧"
+    },
+    "es": {
+      "single": "El guionista de {e} es",
+      "object": "el guionista de {e}",
+      "r_noun": "guionista"
+    },
+    "ja": {
+      "single": "{e}の脚本家は",
+      "r_noun": "脚本家"
+    },
+    "id": {
+      "single": "Penulis skenario dari {e} adalah",
+      "object": "penulis skenario dari {e}",
+      "r_noun": "penulis skenario"
+    },
+    "vi": {
+      "single": "Biên kịch của {e} là",
+      "r_noun": "biên kịch"
+    },
+    "hi": {
+      "r_noun": "पटकथा लेखक"
+    }
+  },
+  "production company": {
+    "en": {
+      "single": "The production company of {e} is",
+      "embed": "the production company of",
+      "r_phrase": "production company"
+    },
+    "ko": {
+      "single": "{e}의 제작사는",
+      "r_noun": "제작사",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的制作公司是",
+      "r_noun": "制作公司"
+    },
+    "es": {
+      "single": "La productora de {e} es",
+      "object": "la productora de {e}",
+      "r_noun": "productora"
+    },
+    "ja": {
+      "single": "{e}の制作会社は",
+      "r_noun": "制作会社"
+    },
+    "id": {
+      "single": "Perusahaan produksi dari {e} adalah",
+      "object": "perusahaan produksi dari {e}",
+      "r_noun": "perusahaan produksi"
+    },
+    "vi": {
+      "single": "Công ty sản xuất của {e} là",
+      "r_noun": "công ty sản xuất"
+    },
+    "hi": {
+      "r_noun": "निर्माण कंपनी"
+    }
+  },
+  "owned by": {
+    "en": {
+      "single": "The owner of {e} is",
+      "embed": "the owner of",
+      "r_phrase": "owner"
+    },
+    "ko": {
+      "single": "{e}의 소유자는",
+      "r_noun": "소유자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的所有者是",
+      "r_noun": "所有者"
+    },
+    "es": {
+      "single": "El propietario de {e} es",
+      "object": "el propietario de {e}",
+      "r_noun": "propietario"
+    },
+    "ja": {
+      "single": "{e}の所有者は",
+      "r_noun": "所有者"
+    },
+    "id": {
+      "single": "Pemilik dari {e} adalah",
+      "object": "pemilik dari {e}",
+      "r_noun": "pemilik"
+    },
+    "vi": {
+      "single": "Chủ sở hữu của {e} là",
+      "r_noun": "chủ sở hữu"
+    },
+    "hi": {
+      "r_noun": "मालिक"
+    }
+  },
+  "country of origin": {
+    "en": {
+      "single": "The country of origin of {e} is",
+      "embed": "the country of origin of",
+      "r_phrase": "country of origin"
+    },
+    "ko": {
+      "single": "{e}의 출신 국가는",
+      "r_noun": "출신 국가",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的来源国家是",
+      "r_noun": "来源国家"
+    },
+    "es": {
+      "single": "El país de origen de {e} es",
+      "object": "el país de origen de {e}",
+      "r_noun": "país de origen"
+    },
+    "ja": {
+      "single": "{e}の原産国は",
+      "r_noun": "原産国"
+    },
+    "id": {
+      "single": "Negara asal dari {e} adalah",
+      "object": "negara asal dari {e}",
+      "r_noun": "negara asal"
+    },
+    "vi": {
+      "single": "Quốc gia xuất xứ của {e} là",
+      "r_noun": "quốc gia xuất xứ"
+    },
+    "hi": {
+      "r_noun": "मूल देश"
+    }
+  },
+  "developer": {
+    "en": {
+      "single": "The developer of {e} is",
+      "embed": "the developer of",
+      "r_phrase": "developer"
+    },
+    "ko": {
+      "single": "{e}의 개발자는",
+      "r_noun": "개발자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的开发者是",
+      "r_noun": "开发者"
+    },
+    "es": {
+      "single": "El desarrollador de {e} es",
+      "object": "el desarrollador de {e}",
+      "r_noun": "desarrollador"
+    },
+    "ja": {
+      "single": "{e}の開発者は",
+      "r_noun": "開発者"
+    },
+    "id": {
+      "single": "Pengembang dari {e} adalah",
+      "object": "pengembang dari {e}",
+      "r_noun": "pengembang"
+    },
+    "vi": {
+      "single": "Nhà phát triển của {e} là",
+      "r_noun": "nhà phát triển"
+    },
+    "hi": {
+      "r_noun": "डेवलपर"
+    }
+  },
+  "chief executive officer": {
+    "en": {
+      "single": "The chief executive officer of {e} is",
+      "embed": "the chief executive officer of",
+      "r_phrase": "chief executive officer"
+    },
+    "ko": {
+      "single": "{e}의 최고경영자는",
+      "r_noun": "최고경영자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的首席执行官是",
+      "r_noun": "首席执行官"
+    },
+    "es": {
+      "single": "El director ejecutivo de {e} es",
+      "object": "el director ejecutivo de {e}",
+      "r_noun": "director ejecutivo"
+    },
+    "ja": {
+      "single": "{e}の最高経営責任者は",
+      "r_noun": "最高経営責任者"
+    },
+    "id": {
+      "single": "Direktur utama dari {e} adalah",
+      "object": "direktur utama dari {e}",
+      "r_noun": "direktur utama"
+    },
+    "vi": {
+      "single": "Giám đốc điều hành của {e} là",
+      "r_noun": "giám đốc điều hành"
+    },
+    "hi": {
+      "r_noun": "मुख्य कार्यकारी अधिकारी"
+    }
+  },
+  "headquarters location": {
+    "en": {
+      "single": "The headquarters location of {e} is",
+      "embed": "the headquarters location of",
+      "r_phrase": "headquarters location"
+    },
+    "ko": {
+      "single": "{e}의 본사 위치는",
+      "r_noun": "본사 위치",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的总部所在地是",
+      "r_noun": "总部所在地"
+    },
+    "es": {
+      "single": "La ubicación de la sede de {e} es",
+      "object": "la ubicación de la sede de {e}",
+      "r_noun": "ubicación de la sede"
+    },
+    "ja": {
+      "single": "{e}の本社所在地は",
+      "r_noun": "本社所在地"
+    },
+    "id": {
+      "single": "Lokasi kantor pusat dari {e} adalah",
+      "object": "lokasi kantor pusat dari {e}",
+      "r_noun": "lokasi kantor pusat"
+    },
+    "vi": {
+      "single": "Địa điểm trụ sở của {e} là",
+      "r_noun": "địa điểm trụ sở"
+    },
+    "hi": {
+      "r_noun": "मुख्यालय स्थान"
+    }
+  },
+  "present in work": {
+    "en": {
+      "single": "The work that features {e} is",
+      "embed": "the work that features",
+      "r_phrase": "present in work"
+    },
+    "ko": {
+      "single": "{e}의 등장 작품은",
+      "r_noun": "등장 작품",
+      "particle": "은"
+    },
+    "zh": {
+      "single": "{e}的登场作品是",
+      "r_noun": "登场作品"
+    },
+    "es": {
+      "single": "La obra en la que aparece {e} es",
+      "object": "la obra en la que aparece {e}",
+      "r_noun": "obra en la que aparece"
+    },
+    "ja": {
+      "single": "{e}の登場作品は",
+      "r_noun": "登場作品"
+    },
+    "id": {
+      "single": "Karya yang menampilkan {e} adalah",
+      "object": "karya yang menampilkan {e}",
+      "r_noun": "karya yang menampilkan"
+    },
+    "vi": {
+      "single": "Tác phẩm có sự xuất hiện của {e} là",
+      "r_noun": "tác phẩm có sự xuất hiện"
+    },
+    "hi": {
+      "r_noun": "प्रस्तुत कृति"
+    }
+  },
+  "author": {
+    "en": {
+      "single": "The author of {e} is",
+      "embed": "the author of",
+      "r_phrase": "author"
+    },
+    "ko": {
+      "single": "{e}의 저자는",
+      "r_noun": "저자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的作者是",
+      "r_noun": "作者"
+    },
+    "es": {
+      "single": "El autor de {e} es",
+      "object": "el autor de {e}",
+      "r_noun": "autor"
+    },
+    "ja": {
+      "single": "{e}の著者は",
+      "r_noun": "著者"
+    },
+    "id": {
+      "single": "Penulis dari {e} adalah",
+      "object": "penulis dari {e}",
+      "r_noun": "penulis"
+    },
+    "vi": {
+      "single": "Tác giả của {e} là",
+      "r_noun": "tác giả"
+    },
+    "hi": {
+      "r_noun": "लेखक"
+    }
+  },
+  "publisher": {
+    "en": {
+      "single": "The publisher of {e} is",
+      "embed": "the publisher of",
+      "r_phrase": "publisher"
+    },
+    "ko": {
+      "single": "{e}의 출판사는",
+      "r_noun": "출판사",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的出版社是",
+      "r_noun": "出版社"
+    },
+    "es": {
+      "single": "La editorial de {e} es",
+      "object": "la editorial de {e}",
+      "r_noun": "editorial"
+    },
+    "ja": {
+      "single": "{e}の出版社は",
+      "r_noun": "出版社"
+    },
+    "id": {
+      "single": "Penerbit dari {e} adalah",
+      "object": "penerbit dari {e}",
+      "r_noun": "penerbit"
+    },
+    "vi": {
+      "single": "Nhà xuất bản của {e} là",
+      "r_noun": "nhà xuất bản"
+    },
+    "hi": {
+      "r_noun": "प्रकाशक"
+    }
+  },
+  "employer": {
+    "en": {
+      "single": "The employer of {e} is",
+      "embed": "the employer of",
+      "r_phrase": "employer"
+    },
+    "ko": {
+      "single": "{e}의 고용주는",
+      "r_noun": "고용주",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的雇主是",
+      "r_noun": "雇主"
+    },
+    "es": {
+      "single": "El empleador de {e} es",
+      "object": "el empleador de {e}",
+      "r_noun": "empleador"
+    },
+    "ja": {
+      "single": "{e}の雇用主は",
+      "r_noun": "雇用主"
+    },
+    "id": {
+      "single": "Pemberi kerja dari {e} adalah",
+      "object": "pemberi kerja dari {e}",
+      "r_noun": "pemberi kerja"
+    },
+    "vi": {
+      "single": "Nhà tuyển dụng của {e} là",
+      "r_noun": "nhà tuyển dụng"
+    },
+    "hi": {
+      "r_noun": "नियोक्ता"
+    }
+  },
+  "head of state": {
+    "en": {
+      "single": "The head of state of {e} is",
+      "embed": "the head of state of",
+      "r_phrase": "head of state"
+    },
+    "ko": {
+      "single": "{e}의 국가원수는",
+      "r_noun": "국가원수",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的国家元首是",
+      "r_noun": "国家元首"
+    },
+    "es": {
+      "single": "El jefe de Estado de {e} es",
+      "object": "el jefe de Estado de {e}",
+      "r_noun": "jefe de Estado"
+    },
+    "ja": {
+      "single": "{e}の国家元首は",
+      "r_noun": "国家元首"
+    },
+    "id": {
+      "single": "Kepala negara dari {e} adalah",
+      "object": "kepala negara dari {e}",
+      "r_noun": "kepala negara"
+    },
+    "vi": {
+      "single": "Nguyên thủ quốc gia của {e} là",
+      "r_noun": "nguyên thủ quốc gia"
+    },
+    "hi": {
+      "r_noun": "राष्ट्राध्यक्ष"
+    }
+  },
+  "founded by": {
+    "en": {
+      "single": "The founder of {e} is",
+      "embed": "the founder of",
+      "r_phrase": "founder"
+    },
+    "ko": {
+      "single": "{e}의 창립자는",
+      "r_noun": "창립자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的创立者是",
+      "r_noun": "创立者"
+    },
+    "es": {
+      "single": "El fundador de {e} es",
+      "object": "el fundador de {e}",
+      "r_noun": "fundador"
+    },
+    "ja": {
+      "single": "{e}の創設者は",
+      "r_noun": "創設者"
+    },
+    "id": {
+      "single": "Pendiri dari {e} adalah",
+      "object": "pendiri dari {e}",
+      "r_noun": "pendiri"
+    },
+    "vi": {
+      "single": "Người sáng lập của {e} là",
+      "r_noun": "người sáng lập"
+    },
+    "hi": {
+      "r_noun": "संस्थापक"
+    }
+  },
+  "chief operating officer": {
+    "en": {
+      "single": "The chief operating officer of {e} is",
+      "embed": "the chief operating officer of",
+      "r_phrase": "chief operating officer"
+    },
+    "ko": {
+      "single": "{e}의 최고운영책임자는",
+      "r_noun": "최고운영책임자",
+      "particle": "는"
+    },
+    "zh": {
+      "single": "{e}的首席运营官是",
+      "r_noun": "首席运营官"
+    },
+    "es": {
+      "single": "El director de operaciones de {e} es",
+      "object": "el director de operaciones de {e}",
+      "r_noun": "director de operaciones"
+    },
+    "ja": {
+      "single": "{e}の最高執行責任者は",
+      "r_noun": "最高執行責任者"
+    },
+    "id": {
+      "single": "Direktur operasional dari {e} adalah",
+      "object": "direktur operasional dari {e}",
+      "r_noun": "direktur operasional"
+    },
+    "vi": {
+      "single": "Giám đốc vận hành của {e} là",
+      "r_noun": "giám đốc vận hành"
+    },
+    "hi": {
+      "r_noun": "मुख्य परिचालन अधिकारी"
+    }
+  }
+}

@@ -1,0 +1,739 @@
+"""Step 6: Bridge Head Set validation via causal interventions.
+
+Uses final_bridge_heads.json from Step 5 (general + language-specific head sets).
+
+Stages
+------
+Stage 1 -- Jaccard overlap analysis
+    All C(n,2) pairs among {general, ko, zh, ja, es} head sets.
+    No model needed.
+
+Stage 2 -- Mean ablation
+    Calibration: 50 correct two-hop prompts x (en + target langs) -> mean head outputs.
+    Test: 30 correct records per language, ablate general set and specific set separately.
+    Compare against random-sampled head set of equal size (20 repeats).
+
+Stage 3 -- Scaling amplification
+    Language-specific heads only (per lang).
+    Data: incorrect_{model}_{lang}.json (already two-hop incorrect).
+    Alpha in {0.25, 0.5, 1.0}; report amplified accuracy only.
+
+Stage 4 -- Cross-lingual transfer accuracy
+    General heads only; amplify during target-language inference.
+    Data: en_correct_{lang}_incorrect_{model}.json.
+    base_acc = 0 by construction; report amplified accuracy and delta.
+
+Usage examples
+--------------
+# All stages
+python script/step6_Bridge_Head_validation.py \
+    --model-short qwen25_72 --model Qwen/Qwen2.5-72B \
+    --langs ko zh ja es
+
+# Jaccard only (no model load)
+python script/step6_Bridge_Head_validation.py \
+    --model-short qwen25_72 --model dummy \
+    --langs ko zh ja es --stage jaccard
+
+# Scaling only, max 100 incorrect records per language
+python script/step6_Bridge_Head_validation.py \
+    --model-short qwen25_72 --model Qwen/Qwen2.5-72B \
+    --langs ko zh ja es --stage scaling --scaling-max-sample 100
+"""
+
+from __future__ import annotations
+
+import argparse
+import itertools
+import json
+import math
+import random
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LOG_DIR = PROJECT_ROOT / "logs"
+
+import sys
+sys.path.insert(0, str(PROJECT_ROOT / "script"))
+
+from utils.common import load_json, save_json, set_seed, setup_logging
+from utils.model_utils import check_answer, load_model_and_tokenizer, predict_next_tokens
+from utils.prompt_utils import wrap_prompt
+from utils.bridge_utils import load_filtered_records, sample_records
+from utils.head_hooks import (
+    HeadMaskManager,
+    _get_head_dim,
+    _get_num_heads,
+    _get_num_layers,
+    collect_mean_head_outputs,
+    compute_nll_eval,
+)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Step 6: Validate Bridge Head sets via causal interventions."
+    )
+    p.add_argument("--model-short", required=True)
+    p.add_argument("--model", required=True)
+    p.add_argument("--langs", nargs="+", default=["ko", "zh", "ja", "es"],
+                   help="Target languages (en is included automatically in calibration).")
+    p.add_argument("--input-root", type=Path, default=PROJECT_ROOT / "data")
+    p.add_argument("--step5-root", type=Path,
+                   default=PROJECT_ROOT / "output" / "step5_BridgeHead_Ablation_Patchscopes",
+                   help="Root of Step 5 output (contains {model_short}/final_bridge_heads.json).")
+    p.add_argument("--output-root", type=Path,
+                   default=PROJECT_ROOT / "output" / "step6_Bridge_Head_validation")
+    p.add_argument("--stage", default="all",
+                   choices=["jaccard", "ablation", "scaling", "transfer", "all"],
+                   help="Which stage to run (default: all). 'jaccard' skips model load.")
+
+    # Stage 2: mean ablation
+    p.add_argument("--ablation-sample-size", type=int, default=100,
+                   help="Correct records per language for ablation test (default: 100).")
+    p.add_argument("--calibration-size", type=int, default=50,
+                   help="Correct records per language for mean calibration (default: 50).")
+    p.add_argument("--random-repeat", type=int, default=20,
+                   help="Random-baseline repeats for ablation (default: 20).")
+
+    # Stage 3 & 4: scaling / transfer
+    p.add_argument("--scaling-max-sample", type=int, default=0,
+                   help="Max records for scaling and transfer (0 = use all; falls back to all "
+                        "when data < N).")
+    p.add_argument("--alpha-list", nargs="+", type=float, default=[0.25, 0.5, 1.0],
+                   help="Alpha values for scaling amplification.")
+
+    # Stage 4: cross-lingual transfer
+    p.add_argument("--cross-lingual-root", type=Path,
+                   default=PROJECT_ROOT / "data",
+                   help="Root containing filtered/cross_lang/ JSON files.")
+
+    # Generation / misc
+    p.add_argument("--n-generate-tokens", type=int, default=10,
+                   help="Max new tokens for greedy generation in transfer/scaling.")
+    p.add_argument("--gold-mode", default="first_span",
+                   choices=["first_span", "first_word", "first_token"],
+                   help="Gold extraction mode for ablation NLL (kept for compatibility).")
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--hf-token", default=None)
+    p.add_argument("--trust-remote-code", action="store_true")
+    p.add_argument("--torch-dtype", default="auto")
+    return p.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Bridge-head loading
+# ---------------------------------------------------------------------------
+
+def load_final_bridge_heads(step5_dir: Path, model_short: str) -> dict[str, Any]:
+    path = step5_dir / model_short / "final_bridge_heads.json"
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    raw = data["final_bridge_heads"]
+    return {
+        "general": [(int(r[0]), int(r[1])) for r in raw["general"]],
+        "specific": {
+            lang: [(int(r[0]), int(r[1])) for r in heads]
+            for lang, heads in raw.get("specific", {}).items()
+        },
+    }
+
+
+def _all_model_heads(model) -> list[tuple[int, int]]:
+    n_layers = _get_num_layers(model)
+    n_heads = _get_num_heads(model)
+    return [(l, h) for l in range(n_layers) for h in range(n_heads)]
+
+
+# ---------------------------------------------------------------------------
+# Data-loading helpers
+# ---------------------------------------------------------------------------
+
+def load_incorrect_records(input_root: Path, model_short: str, lang: str) -> list[dict]:
+    path = input_root / model_short / "filtered" / lang / f"incorrect_{model_short}_{lang}.json"
+    return load_json(path)
+
+
+def _apply_scaling_sample(records: list[dict], max_sample: int, seed: int) -> list[dict]:
+    if max_sample <= 0 or max_sample >= len(records):
+        return list(records)
+    return sample_records(records, max_sample, seed)
+
+
+def _gold_labels(record: dict) -> list[str]:
+    labels: list[str] = []
+    e3 = record.get("e3", {})
+    if isinstance(e3, dict):
+        for key in ("label", "label_en"):
+            v = e3.get(key)
+            if v and str(v).strip():
+                labels.append(str(v).strip())
+    for key in ("e3_label", "e3_label_en"):
+        v = record.get(key)
+        if v and str(v).strip() and str(v).strip() not in labels:
+            labels.append(str(v).strip())
+    return labels
+
+
+def _save_results(records: list[dict], path_stem: Path) -> None:
+    path_stem.parent.mkdir(parents=True, exist_ok=True)
+    if records:
+        pd.DataFrame(records).to_csv(path_stem.with_suffix(".csv"), index=False)
+    with path_stem.with_suffix(".jsonl").open("w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: Jaccard Overlap Analysis
+# ---------------------------------------------------------------------------
+
+def _jaccard(a: set, b: set) -> float:
+    u = len(a | b)
+    return float("nan") if u == 0 else len(a & b) / u
+
+
+def run_jaccard_analysis(
+    bridge_heads: dict[str, Any],
+    langs: list[str],
+    out_dir: Path,
+    logger,
+) -> list[dict]:
+    named_sets: dict[str, set[tuple[int, int]]] = {
+        "general": set(bridge_heads["general"])
+    }
+    for lang in langs:
+        if lang in bridge_heads["specific"] and bridge_heads["specific"][lang]:
+            named_sets[lang] = set(bridge_heads["specific"][lang])
+        else:
+            logger.warning("No specific heads for lang=%s -- omitting from Jaccard.", lang)
+
+    rows: list[dict] = []
+    for name_a, name_b in itertools.combinations(named_sets.keys(), 2):
+        a, b = named_sets[name_a], named_sets[name_b]
+        j = _jaccard(a, b)
+        rows.append({
+            "set_a": name_a,
+            "set_b": name_b,
+            "size_a": len(a),
+            "size_b": len(b),
+            "intersection": len(a & b),
+            "union": len(a | b),
+            "jaccard": j,
+        })
+        logger.info(
+            "Jaccard  %-10s x %-10s  |A&B|=%d  |AuB|=%d  J=%.4f",
+            name_a, name_b, len(a & b), len(a | b), j,
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _save_results(rows, out_dir / "jaccard_overlap")
+    logger.info("Jaccard analysis complete: %d pairs -> %s", len(rows), out_dir / "jaccard_overlap.csv")
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: Mean Ablation
+# ---------------------------------------------------------------------------
+
+def _collect_valid_items_ablation(
+    model,
+    tokenizer,
+    records: list[dict],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for record in records:
+        labels = _gold_labels(record)
+        if not labels:
+            continue
+        gold = labels[0]
+        prompt = wrap_prompt(record["prompts"]["two_hop"], record["lang"])
+        nll_base = compute_nll_eval(model, tokenizer, prompt, gold)
+        if math.isnan(nll_base):
+            continue
+        items.append({"id": record["id"], "prompt": prompt, "gold": gold, "nll_base": nll_base})
+    return items
+
+
+def _summary_stats(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {"mean": float("nan"), "std": float("nan"), "n": 0}
+    arr = np.array(values, dtype=np.float64)
+    return {"mean": float(arr.mean()), "std": float(arr.std()), "n": len(arr)}
+
+
+def _ablation_nlls(
+    model,
+    tokenizer,
+    items: list[dict[str, Any]],
+    head_set: list[tuple[int, int]],
+    mean_values: dict[tuple[int, int], float],
+    mask_mgr: HeadMaskManager,
+) -> list[float]:
+    nlls: list[float] = []
+    for item in items:
+        mask_mgr.reset_masks()
+        mask_mgr.apply_head_set_ablation(head_set, mean_values)
+        nlls.append(compute_nll_eval(model, tokenizer, item["prompt"], item["gold"]))
+    mask_mgr.reset_masks()
+    return nlls
+
+
+def run_mean_ablation(
+    args: argparse.Namespace,
+    model,
+    tokenizer,
+    bridge_heads: dict[str, Any],
+    out_dir: Path,
+    logger,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+
+    n_layers = _get_num_layers(model)
+    n_heads = _get_num_heads(model)
+    head_dim = _get_head_dim(model)
+    all_heads = _all_model_heads(model)
+
+    # Calibration: gather mean head outputs from correct two-hop prompts
+    # 50 per lang x (en + --langs) = up to 250 prompts
+    calib_langs = ["en"] + [l for l in args.langs if l != "en"]
+    calib_prompts: list[str] = []
+    for clang in calib_langs:
+        try:
+            calib_records = load_filtered_records(args.input_root, args.model_short, clang)
+        except FileNotFoundError:
+            logger.warning("Calibration: correct records not found for lang=%s -- skipping.", clang)
+            continue
+        calib_sample = sample_records(calib_records, args.calibration_size, args.seed)
+        for rec in calib_sample:
+            calib_prompts.append(wrap_prompt(rec["prompts"]["two_hop"], rec["lang"]))
+
+    logger.info(
+        "Calibration: %d prompts from %d langs (target %d x %d = %d).",
+        len(calib_prompts), len(calib_langs),
+        len(calib_langs), args.calibration_size, len(calib_langs) * args.calibration_size,
+    )
+    mean_values = collect_mean_head_outputs(
+        model, tokenizer, calib_prompts, n_layers, n_heads, head_dim
+    )
+    logger.info("Mean head outputs collected.")
+
+    general_set = bridge_heads["general"]
+    rng = random.Random(args.seed)
+
+    with HeadMaskManager(model, n_layers, n_heads, head_dim) as mask_mgr:
+        for lang in args.langs:
+            try:
+                records = load_filtered_records(args.input_root, args.model_short, lang)
+            except FileNotFoundError:
+                logger.warning("Ablation: correct records not found for lang=%s -- skipping.", lang)
+                continue
+            records = sample_records(records, args.ablation_sample_size, args.seed)
+            items = _collect_valid_items_ablation(model, tokenizer, records)
+            logger.info("Ablation lang=%s: %d/%d valid items.", lang, len(items), len(records))
+            if not items:
+                continue
+
+            base_nlls = [item["nll_base"] for item in items]
+            base_nll_mean = float(np.mean(base_nlls))
+
+            specific_set = bridge_heads["specific"].get(lang, [])
+            conditions: list[tuple[str, list[tuple[int, int]]]] = [
+                ("general", general_set),
+                ("specific", specific_set),
+            ]
+
+            for head_set_type, head_set in conditions:
+                if not head_set:
+                    logger.warning(
+                        "Ablation lang=%s type=%s: empty head set -- skipping.",
+                        lang, head_set_type,
+                    )
+                    continue
+                k = len(head_set)
+
+                # Bridge head ablation
+                bth_nlls = _ablation_nlls(model, tokenizer, items, head_set, mean_values, mask_mgr)
+                delta_bth = [a - b for a, b in zip(bth_nlls, base_nlls)]
+                bth_stats = _summary_stats(delta_bth)
+
+                results.append({
+                    "model": args.model_short,
+                    "lang": lang,
+                    "head_set_type": head_set_type,
+                    "baseline_type": "bth",
+                    "intervention": "mean_ablation",
+                    "k": k,
+                    "sample_size": len(items),
+                    "base_nll_mean": base_nll_mean,
+                    "intervened_nll_mean": float(np.mean(bth_nlls)),
+                    "delta_nll_mean": bth_stats["mean"],
+                    "delta_nll_std": bth_stats["std"],
+                })
+
+                # Random baseline (same k, --random-repeat repeats)
+                rand_deltas: list[float] = []
+                for _ in range(args.random_repeat):
+                    rand_set = rng.sample(all_heads, k=min(k, len(all_heads)))
+                    r_nlls = _ablation_nlls(
+                        model, tokenizer, items, rand_set, mean_values, mask_mgr
+                    )
+                    rand_deltas.extend([a - b for a, b in zip(r_nlls, base_nlls)])
+                rand_stats = _summary_stats(rand_deltas)
+
+                results.append({
+                    "model": args.model_short,
+                    "lang": lang,
+                    "head_set_type": head_set_type,
+                    "baseline_type": "random",
+                    "intervention": "mean_ablation",
+                    "k": k,
+                    "sample_size": len(items),
+                    "base_nll_mean": base_nll_mean,
+                    "intervened_nll_mean": base_nll_mean + rand_stats["mean"],
+                    "delta_nll_mean": rand_stats["mean"],
+                    "delta_nll_std": rand_stats["std"],
+                })
+
+                logger.info(
+                    "lang=%-4s  type=%-8s  k=%d  BTH_delta=%.4f  rand_delta=%.4f",
+                    lang, head_set_type, k, bth_stats["mean"], rand_stats["mean"],
+                )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _save_results(results, out_dir / "ablation_results")
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: Scaling Amplification
+# ---------------------------------------------------------------------------
+
+def run_scaling_amplification(
+    lang: str,
+    args: argparse.Namespace,
+    model,
+    tokenizer,
+    bridge_heads: dict[str, Any],
+    out_dir: Path,
+    logger,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+
+    specific_heads = bridge_heads["specific"].get(lang, [])
+    if not specific_heads:
+        logger.warning("No specific heads for lang=%s -- skipping scaling.", lang)
+        return results
+
+    n_layers = _get_num_layers(model)
+    n_heads = _get_num_heads(model)
+    head_dim = _get_head_dim(model)
+
+    try:
+        records = load_incorrect_records(args.input_root, args.model_short, lang)
+    except FileNotFoundError:
+        logger.warning("Scaling: incorrect records not found for lang=%s -- skipping.", lang)
+        return results
+    records = _apply_scaling_sample(records, args.scaling_max_sample, args.seed)
+    logger.info(
+        "Scaling lang=%s: %d records  specific_heads=%d",
+        lang, len(records), len(specific_heads),
+    )
+    if not records:
+        return results
+
+    items: list[dict] = []
+    for record in records:
+        labels = _gold_labels(record)
+        if not labels:
+            continue
+        prompt = wrap_prompt(record["prompts"]["two_hop"], record["lang"])
+        items.append({"id": record["id"], "prompt": prompt, "labels": labels})
+
+    logger.info("Scaling lang=%s: %d valid items.", lang, len(items))
+    if not items:
+        return results
+
+    with HeadMaskManager(model, n_layers, n_heads, head_dim) as mask_mgr:
+        for alpha in args.alpha_list:
+            correct = 0
+            for item_i, item in enumerate(items, 1):
+                mask_mgr.reset_masks()
+                mask_mgr.apply_head_set_scaling(specific_heads, alpha)
+                pred = predict_next_tokens(
+                    model, tokenizer, item["prompt"], n_tokens=args.n_generate_tokens
+                )
+                mask_mgr.reset_masks()
+                if check_answer(pred.split("\n")[0].strip(), item["labels"]):
+                    correct += 1
+                if item_i % 20 == 0 or item_i == len(items):
+                    logger.info(
+                        "  Scaling lang=%s alpha=%.2f  item %d/%d  acc_so_far=%.3f",
+                        lang, alpha, item_i, len(items), correct / item_i,
+                    )
+
+            acc = correct / len(items)
+            results.append({
+                "model": args.model_short,
+                "lang": lang,
+                "head_set_type": "specific",
+                "intervention": "scaling",
+                "alpha": alpha,
+                "k": len(specific_heads),
+                "n_items": len(items),
+                "n_correct": correct,
+                "amplified_accuracy": acc,
+            })
+            logger.info(
+                "Scaling lang=%-4s  alpha=%.2f  amplified_acc=%.4f  (%d/%d)",
+                lang, alpha, acc, correct, len(items),
+            )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Stage 4: Cross-lingual Transfer Accuracy
+# ---------------------------------------------------------------------------
+
+def _load_cross_lingual_file(
+    cross_lingual_root: Path,
+    model_short: str,
+    tgt_lang: str,
+) -> list[dict]:
+    fname = f"en_correct_{tgt_lang}_incorrect_{model_short}.json"
+    path = cross_lingual_root / model_short / "filtered" / "cross_lang" / fname
+    if not path.exists():
+        raise FileNotFoundError(f"Cross-lingual file not found: {path}")
+    return load_json(path)
+
+
+def run_transfer_accuracy(
+    tgt_lang: str,
+    args: argparse.Namespace,
+    model,
+    tokenizer,
+    bridge_heads: dict[str, Any],
+    logger,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+
+    general_heads = bridge_heads["general"]
+    if not general_heads:
+        logger.warning("No general heads -- skipping transfer for tgt_lang=%s.", tgt_lang)
+        return results
+
+    try:
+        records = _load_cross_lingual_file(args.cross_lingual_root, args.model_short, tgt_lang)
+    except FileNotFoundError as exc:
+        logger.warning("Skipping transfer tgt_lang=%s: %s", tgt_lang, exc)
+        return results
+
+    records = _apply_scaling_sample(records, args.scaling_max_sample, args.seed)
+    logger.info(
+        "Transfer tgt_lang=%s: %d records  general_heads=%d",
+        tgt_lang, len(records), len(general_heads),
+    )
+    if not records:
+        return results
+
+    n_layers = _get_num_layers(model)
+    n_heads = _get_num_heads(model)
+    head_dim = _get_head_dim(model)
+
+    items: list[dict] = []
+    for rec in records:
+        lang_data = rec["langs"].get(tgt_lang)
+        if lang_data is None:
+            continue
+        prompt = wrap_prompt(lang_data["prompts"]["two_hop"], tgt_lang)
+        labels = [
+            str(v).strip()
+            for v in [lang_data.get("e3_label"), lang_data.get("e3_label_en")]
+            if v and str(v).strip()
+        ]
+        if not labels:
+            continue
+        items.append({"id": rec["id"], "prompt": prompt, "labels": labels})
+
+    logger.info("Transfer tgt_lang=%s: %d valid items.", tgt_lang, len(items))
+    if not items:
+        return results
+
+    with HeadMaskManager(model, n_layers, n_heads, head_dim) as mask_mgr:
+        for alpha in args.alpha_list:
+            correct = 0
+            for item_i, item in enumerate(items, 1):
+                mask_mgr.reset_masks()
+                mask_mgr.apply_head_set_scaling(general_heads, alpha)
+                pred = predict_next_tokens(
+                    model, tokenizer, item["prompt"], n_tokens=args.n_generate_tokens
+                )
+                mask_mgr.reset_masks()
+                if check_answer(pred.split("\n")[0].strip(), item["labels"]):
+                    correct += 1
+                if item_i % 20 == 0 or item_i == len(items):
+                    logger.info(
+                        "  Transfer tgt_lang=%s alpha=%.2f  item %d/%d  acc_so_far=%.3f",
+                        tgt_lang, alpha, item_i, len(items), correct / item_i,
+                    )
+
+            acc = correct / len(items)
+            results.append({
+                "model": args.model_short,
+                "tgt_lang": tgt_lang,
+                "head_set_type": "general",
+                "intervention": "scaling",
+                "alpha": alpha,
+                "k": len(general_heads),
+                "n_items": len(items),
+                "n_correct": correct,
+                "base_accuracy": 0.0,
+                "amplified_accuracy": acc,
+                "acc_delta": acc,
+            })
+            logger.info(
+                "Transfer tgt_lang=%-4s  alpha=%.2f  amplified_acc=%.4f  (%d/%d)",
+                tgt_lang, alpha, acc, correct, len(items),
+            )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    args = parse_args()
+    set_seed(args.seed)
+
+    logger = setup_logging(f"step6_Bridge_Head_validation_{args.model_short}", LOG_DIR)
+    logger.info(
+        "Step 6 -- model=%s  langs=%s  stage=%s",
+        args.model_short, args.langs, args.stage,
+    )
+
+    step5_dir = args.step5_root
+    summary_dir = args.output_root / args.model_short
+    summary_dir.mkdir(parents=True, exist_ok=True)
+
+    bridge_heads = load_final_bridge_heads(step5_dir, args.model_short)
+    logger.info(
+        "Loaded bridge heads: general=%d  specific=%s",
+        len(bridge_heads["general"]),
+        {k: len(v) for k, v in bridge_heads["specific"].items()},
+    )
+
+    # Stage 1: Jaccard (no model needed)
+    jaccard_results: list[dict] = []
+    if args.stage in ("jaccard", "all"):
+        logger.info("=== Stage 1: Jaccard Overlap Analysis ===")
+        jaccard_results = run_jaccard_analysis(
+            bridge_heads, langs=args.langs, out_dir=summary_dir, logger=logger,
+        )
+
+    if args.stage == "jaccard":
+        logger.info("Stage 'jaccard' complete. Skipping model load.")
+        return
+
+    # Model load
+    logger.info("Loading model: %s", args.model)
+    model, tokenizer = load_model_and_tokenizer(
+        args.model,
+        device="auto",
+        torch_dtype=args.torch_dtype,
+        hf_token=args.hf_token,
+        trust_remote_code=args.trust_remote_code,
+        attn_implementation="eager",
+    )
+
+    all_ablation: list[dict] = []
+    all_scaling: list[dict] = []
+    all_transfer: list[dict] = []
+
+    # Stage 2: Mean Ablation
+    if args.stage in ("ablation", "all"):
+        logger.info("=== Stage 2: Mean Ablation ===")
+        try:
+            all_ablation = run_mean_ablation(
+                args, model, tokenizer, bridge_heads, out_dir=summary_dir, logger=logger,
+            )
+        except Exception as exc:
+            logger.error("Mean ablation failed: %s", exc, exc_info=True)
+
+    # Stage 3: Scaling Amplification
+    if args.stage in ("scaling", "all"):
+        for lang in args.langs:
+            out_dir = args.output_root / args.model_short / lang
+            out_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("=== Stage 3: Scaling Amplification -- lang=%s ===", lang)
+            try:
+                amp = run_scaling_amplification(
+                    lang, args, model, tokenizer, bridge_heads, out_dir, logger
+                )
+                all_scaling.extend(amp)
+                _save_results(amp, out_dir / "scaling_results")
+            except Exception as exc:
+                logger.error("Scaling failed for lang=%s: %s", lang, exc, exc_info=True)
+
+    # Stage 4: Cross-lingual Transfer Accuracy
+    if args.stage in ("transfer", "all"):
+        tgt_langs = [l for l in args.langs if l != "en"]
+        if not tgt_langs:
+            logger.warning("Stage 4 skipped: no non-EN languages in --langs.")
+        for tgt_lang in tgt_langs:
+            out_dir = args.output_root / args.model_short / tgt_lang
+            out_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("=== Stage 4: Transfer Accuracy -- tgt_lang=%s ===", tgt_lang)
+            try:
+                tr = run_transfer_accuracy(
+                    tgt_lang, args, model, tokenizer, bridge_heads, logger
+                )
+                all_transfer.extend(tr)
+                _save_results(tr, out_dir / f"transfer_accuracy_en2{tgt_lang}")
+            except Exception as exc:
+                logger.error("Transfer failed for tgt_lang=%s: %s", tgt_lang, exc, exc_info=True)
+
+    # Aggregate summaries
+    if all_ablation:
+        pd.DataFrame(all_ablation).to_csv(summary_dir / "ablation_all_langs.csv", index=False)
+    if all_scaling:
+        pd.DataFrame(all_scaling).to_csv(summary_dir / "scaling_all_langs.csv", index=False)
+    if all_transfer:
+        pd.DataFrame(all_transfer).to_csv(
+            summary_dir / "transfer_accuracy_all_langs.csv", index=False
+        )
+
+    summary = {
+        "model": args.model_short,
+        "stage": args.stage,
+        "langs": args.langs,
+        "alpha_list": args.alpha_list,
+        "ablation_sample_size": args.ablation_sample_size,
+        "calibration_size": args.calibration_size,
+        "scaling_max_sample": args.scaling_max_sample,
+        "n_general_heads": len(bridge_heads["general"]),
+        "n_specific_heads": {k: len(v) for k, v in bridge_heads["specific"].items()},
+        "n_jaccard_pairs": len(jaccard_results),
+        "n_ablation_records": len(all_ablation),
+        "n_scaling_records": len(all_scaling),
+        "n_transfer_records": len(all_transfer),
+    }
+    save_json(summary, summary_dir / "validation_summary.json")
+    logger.info(
+        "Step 6 complete.  jaccard=%d  ablation=%d  scaling=%d  transfer=%d",
+        len(jaccard_results), len(all_ablation), len(all_scaling), len(all_transfer),
+    )
+
+
+if __name__ == "__main__":
+    main()

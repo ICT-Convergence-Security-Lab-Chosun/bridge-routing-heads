@@ -1,7 +1,7 @@
-"""Extra 4: Alternative BHS Formula Variants — Head Set Discovery & Jaccard Overlap.
+"""Extra 3: Alternative BRS Formula Variants — Head Set Discovery & Jaccard Overlap.
 
 Re-uses the per-item gradient scores computed in Step 4
-(output/step4_filtering_Bridge_head_Score/{model_short}/{lang}/scores_{cond}_{lang}.parquet)
+(output/step4_filtering_Bridge_Routing_Score/{model_short}/{lang}/scores_{cond}_{lang}.parquet)
 and re-applies them with three modified aggregation formulas:
 
   Variant A — th-sh     : z(TH) - z(SH)          (FH removed)
@@ -10,7 +10,7 @@ and re-applies them with three modified aggregation formulas:
 
 Pipeline per variant (mirrors Step 4 aggregation):
   1.  Load mean scores from Step-4 parquet files.
-  2.  Compute per-language BHS vector with the variant formula.
+  2.  Compute per-language BRS vector with the variant formula.
   3.  Build top-percent candidate pool per language:
         LLaMA (llama31_70) : top 10 %
         Qwen  (qwen25_72)  : top 13 %
@@ -18,21 +18,21 @@ Pipeline per variant (mirrors Step 4 aggregation):
   5.  Specific set       = top 4 % of each language AFTER masking General heads.
   6.  Within-variant Jaccard / enrichment / hypergeometric / Spearman overlap.
 
-Intermediate per-head score DataFrames (raw scores, z-scores, BHS, rank) are
+Intermediate per-head score DataFrames (raw scores, z-scores, BRS, rank) are
 saved for every variant × language, so downstream scripts can load them directly.
 
 Output layout
 -------------
-  output/extra/extra_4_bhs_variants/{model_short}/{variant}/
+  output/extra/extra_3_brs_variants/{model_short}/{variant}/
       {lang}/
-          bridge_scores_{lang}.parquet   # per-head: S_FH, S_TH, S_SH, z_*, BHS, rank
+          bridge_scores_{lang}.parquet   # per-head: S_FH, S_TH, S_SH, z_*, BRS, rank
           bridge_scores_{lang}.jsonl
       head_sets.json           # General + Specific + per-lang top-percent sets
       head_sets.jsonl
       overlap_metrics.json
       overlap_metrics.csv
       summary.csv
-  output/extra/extra_4_bhs_variants/{model_short}/
+  output/extra/extra_3_brs_variants/{model_short}/
       variant_comparison.json  # cross-variant Jaccard on General / Specific sets
       variant_comparison.csv
 
@@ -40,36 +40,36 @@ Stages
 ------
   variants  — compute all variant head sets (default)
   compare   — compare variant head sets vs. original Step-4 fh+th-sh head sets
-              (Jaccard on set intersections, Spearman ρ on per-head BHS vectors)
+              (Jaccard on set intersections, Spearman ρ on per-head BRS vectors)
   all       — run variants then compare
 
 Output layout (compare stage)
 -----------------------------
-  output/extra/extra_4_bhs_variants/{model_short}/
+  output/extra/extra_3_brs_variants/{model_short}/
       step4_comparison.json  — full records
       step4_comparison.csv   — tabular: variant, set_name, lang, jaccard,
-                               intersection, size_variant, size_step4, spearman_bhs
+                               intersection, size_variant, size_step4, spearman_brs
 
 Usage examples
 --------------
 # All variants, all models, all languages
-python script/extra/extra_4_bhs_variants.py
+python script/extra/extra_3_brs_variants.py
 
 # Single model
-python script/extra/extra_4_bhs_variants.py --models llama31_70
+python script/extra/extra_3_brs_variants.py --models llama31_70
 
 # Custom top-percent overrides
-python script/extra/extra_4_bhs_variants.py \\
+python script/extra/extra_3_brs_variants.py \\
     --top-percent-llama 0.08 --top-percent-qwen 0.13 --specific-percent 0.04
 
 # Only specific variants
-python script/extra/extra_4_bhs_variants.py --variants th-sh th
+python script/extra/extra_3_brs_variants.py --variants th-sh th
 
 # Run variants stage then compare to Step-4 baseline
-python script/extra/extra_4_bhs_variants.py --stage all
+python script/extra/extra_3_brs_variants.py --stage all
 
 # Only the comparison (requires variant outputs to already exist)
-python script/extra/extra_4_bhs_variants.py --stage compare
+python script/extra/extra_3_brs_variants.py --stage compare
 
   ablation  — mean-ablation with k heads randomly drawn from each variant's pool.
               k = Step-5 final_bridge_heads count (General and per-lang Specific).
@@ -80,14 +80,14 @@ python script/extra/extra_4_bhs_variants.py --stage compare
 
 Output layout (ablation stage)
 ------------------------------
-  output/extra/extra_4_bhs_variants/{model_short}/ablation/
+  output/extra/extra_3_brs_variants/{model_short}/ablation/
       {variant}_{lang}_general_draws.csv   — 30-row draw-level delta-NLL
       {variant}_{lang}_specific_draws.csv
       ablation_summary.csv                 — mean/std/95%CI over 30 draws
 
 Usage example (ablation)
 ------------------------
-python script/extra/extra_4_bhs_variants.py \\
+python script/extra/extra_3_brs_variants.py \\
     --stage ablation \\
     --models llama31_70 \\
     --model meta-llama/Llama-3.1-70B
@@ -107,10 +107,10 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STEP4_ROOT  = PROJECT_ROOT / "output" / "step4_filtering_Bridge_head_Score"
+STEP4_ROOT  = PROJECT_ROOT / "output" / "step4_filtering_Bridge_Routing_Score"
 STEP5_ROOT  = PROJECT_ROOT / "output" / "step5_BridgeHead_Ablation_Patchscopes"
 STEP6_ROOT  = PROJECT_ROOT / "output" / "step6_Bridge_Head_validation"
-OUTPUT_ROOT = PROJECT_ROOT / "output" / "extra" / "extra_4_bhs_variants"
+OUTPUT_ROOT = PROJECT_ROOT / "output" / "extra" / "extra_3_brs_variants"
 
 # ---------------------------------------------------------------------------
 # Model-specific defaults
@@ -149,7 +149,7 @@ def compute_variant(
     mean_sh: np.ndarray,
     variant: str,
 ) -> np.ndarray:
-    """Return the BHS vector for the requested variant formula."""
+    """Return the BRS vector for the requested variant formula."""
     z_fh = zscores(mean_fh)
     z_th = zscores(mean_th)
     z_sh = zscores(mean_sh)
@@ -270,7 +270,7 @@ def build_score_df(
     mean_fh: np.ndarray,
     mean_th: np.ndarray,
     mean_sh: np.ndarray,
-    bhs: np.ndarray,
+    brs: np.ndarray,
     n_layers: int,
     n_heads: int,
     model_short: str,
@@ -280,7 +280,7 @@ def build_score_df(
     z_fh = zscores(mean_fh)
     z_th = zscores(mean_th)
     z_sh = zscores(mean_sh)
-    ranks = (-bhs).argsort().argsort() + 1  # rank 1 = highest BHS
+    ranks = (-brs).argsort().argsort() + 1  # rank 1 = highest BRS
 
     rows = []
     for flat_idx in range(n_layers * n_heads):
@@ -299,27 +299,27 @@ def build_score_df(
             "z_FH":    float(z_fh[flat_idx]),
             "z_TH":    float(z_th[flat_idx]),
             "z_SH":    float(z_sh[flat_idx]),
-            "BHS":     float(bhs[flat_idx]),
-            "rank_bhs": int(ranks[flat_idx]),
+            "BRS":     float(brs[flat_idx]),
+            "rank_brs": int(ranks[flat_idx]),
         })
     return pd.DataFrame(rows)
 
 
 def flat_set_to_records(
     flat_indices: set[int],
-    bhs: np.ndarray,
+    brs: np.ndarray,
     n_heads: int,
 ) -> list[dict]:
     result = []
-    for flat_idx in sorted(flat_indices, key=lambda f: -bhs[f]):
+    for flat_idx in sorted(flat_indices, key=lambda f: -brs[f]):
         layer, head = divmod(flat_idx, n_heads)
         result.append({
             "layer": layer,
             "head":  head,
             "head_id": f"L{layer}H{head}",
             "flat_index": flat_idx,
-            "bhs_score": float(bhs[flat_idx]),
-            "rank": int((-bhs).argsort().argsort()[flat_idx] + 1),
+            "brs_score": float(brs[flat_idx]),
+            "rank": int((-brs).argsort().argsort()[flat_idx] + 1),
         })
     return result
 
@@ -364,15 +364,15 @@ def run_variant(
         print(f"    [WARN] No data found for {model_short} — skipping variant.")
         return {}
 
-    # --- Compute BHS vectors and per-lang score DataFrames ---
-    bhs_by_lang: dict[str, np.ndarray] = {}
+    # --- Compute BRS vectors and per-lang score DataFrames ---
+    brs_by_lang: dict[str, np.ndarray] = {}
     for lang in langs_present:
         s = raw[lang]
-        bhs = compute_variant(s["fh"], s["th"], s["sh"], variant)
-        bhs_by_lang[lang] = bhs
+        brs = compute_variant(s["fh"], s["th"], s["sh"], variant)
+        brs_by_lang[lang] = brs
 
         df = build_score_df(
-            s["fh"], s["th"], s["sh"], bhs,
+            s["fh"], s["th"], s["sh"], brs,
             n_layers, n_heads, model_short, lang, variant,
         )
         lang_dir = variant_dir / lang
@@ -380,9 +380,9 @@ def run_variant(
         pq_path = lang_dir / f"bridge_scores_{lang}.parquet"
         df.to_parquet(pq_path, index=False)
         _jsonl_write(df.to_dict(orient="records"), pq_path.with_suffix(".jsonl"))
-        print(f"    [{lang}] Saved bridge_scores  (BHS range [{bhs.min():.3f}, {bhs.max():.3f}])")
+        print(f"    [{lang}] Saved bridge_scores  (BRS range [{brs.min():.3f}, {brs.max():.3f}])")
 
-    avg_bhs = np.mean([bhs_by_lang[l] for l in langs_present], axis=0)
+    avg_brs = np.mean([brs_by_lang[l] for l in langs_present], axis=0)
 
     # --- Build head sets ---
     flat_sets: dict[str, set[int]] = {}
@@ -395,9 +395,9 @@ def run_variant(
     # Per-language top-percent pool
     bridge_top: dict[str, set[int]] = {}
     for lang in langs_present:
-        top_set = top_percent_set(bhs_by_lang[lang], top_percent)
+        top_set = top_percent_set(brs_by_lang[lang], top_percent)
         bridge_top[lang] = top_set
-        _register(f"H_Bridge_{lang.upper()}", top_set, bhs_by_lang[lang])
+        _register(f"H_Bridge_{lang.upper()}", top_set, brs_by_lang[lang])
 
     # General = strict intersection
     if len(bridge_top) >= 2:
@@ -406,17 +406,17 @@ def run_variant(
         general = next(iter(bridge_top.values())).copy()
     else:
         general = set()
-    _register("H_Bridge_General", general, avg_bhs)
+    _register("H_Bridge_General", general, avg_brs)
     print(f"    H_Bridge_General: {len(general)} heads  (intersection of {len(langs_present)} langs)")
 
     # Specific = top specific_percent per language, after masking General
     for lang in langs_present:
-        bhs = bhs_by_lang[lang]
-        masked = bhs.copy()
+        brs = brs_by_lang[lang]
+        masked = brs.copy()
         for h in general:
             masked[h] = -np.inf
         specific = top_percent_set(masked, specific_percent)
-        _register(f"H_Bridge_Specific_{lang.upper()}", specific, bhs)
+        _register(f"H_Bridge_Specific_{lang.upper()}", specific, brs)
         print(f"    H_Bridge_Specific_{lang.upper()}: {len(specific)} heads")
 
     # --- Save head sets ---
@@ -430,12 +430,12 @@ def run_variant(
     # --- Overlap metrics ---
     def _score_for(sname: str) -> np.ndarray:
         if sname == "H_Bridge_General":
-            return avg_bhs
+            return avg_brs
         if sname.startswith("H_Bridge_Specific_"):
             lc = sname.removeprefix("H_Bridge_Specific_").lower()
-            return bhs_by_lang.get(lc, np.zeros(n_total))
+            return brs_by_lang.get(lc, np.zeros(n_total))
         lc = sname.removeprefix("H_Bridge_").lower()
-        return bhs_by_lang.get(lc, np.zeros(n_total))
+        return brs_by_lang.get(lc, np.zeros(n_total))
 
     pairs: list[tuple[str, str]] = []
     for lang in langs_present:
@@ -549,13 +549,13 @@ def _load_step4_head_sets(model_short: str) -> dict[str, set[int]] | None:
     return result
 
 
-def _load_step4_bhs(model_short: str, lang: str) -> np.ndarray | None:
-    """Load Step-4 fh+th-sh bridge_scores parquet → BHS vector (n_total,)."""
+def _load_step4_brs(model_short: str, lang: str) -> np.ndarray | None:
+    """Load Step-4 fh+th-sh bridge_scores parquet → BRS vector (n_total,)."""
     path = STEP4_ROOT / model_short / _STEP4_FORMULA / lang / f"bridge_scores_{lang}.parquet"
     if not path.exists():
         return None
     df = pd.read_parquet(path)
-    return df["BHS"].values.astype(np.float64)
+    return df["BRS"].values.astype(np.float64)
 
 
 def _load_variant_head_sets(out_model_dir: Path, variant: str) -> dict[str, set[int]] | None:
@@ -571,13 +571,13 @@ def _load_variant_head_sets(out_model_dir: Path, variant: str) -> dict[str, set[
     return result
 
 
-def _load_variant_bhs(out_model_dir: Path, variant: str, lang: str) -> np.ndarray | None:
-    """Load variant bridge_scores parquet → BHS vector (n_total,)."""
+def _load_variant_brs(out_model_dir: Path, variant: str, lang: str) -> np.ndarray | None:
+    """Load variant bridge_scores parquet → BRS vector (n_total,)."""
     path = out_model_dir / variant / lang / f"bridge_scores_{lang}.parquet"
     if not path.exists():
         return None
     df = pd.read_parquet(path)
-    return df["BHS"].values.astype(np.float64)
+    return df["BRS"].values.astype(np.float64)
 
 
 def run_step4_comparison(
@@ -586,13 +586,13 @@ def run_step4_comparison(
     langs: list[str],
     out_model_dir: Path,
 ) -> None:
-    """Compare each variant's head sets and BHS vectors to the Step-4 fh+th-sh baseline.
+    """Compare each variant's head sets and BRS vectors to the Step-4 fh+th-sh baseline.
 
     For every (variant, set_name) pair that exists in both the variant outputs
     and the Step-4 results, computes:
       - Jaccard similarity between the two head sets
       - intersection / union sizes
-      - Spearman ρ on the per-head BHS vectors (per language only)
+      - Spearman ρ on the per-head BRS vectors (per language only)
 
     Results saved to {out_model_dir}/step4_comparison.json and .csv.
     """
@@ -639,10 +639,10 @@ def run_step4_comparison(
                 "intersection": inter,
                 "union":        union,
                 "jaccard":      round(jac, 6),
-                "spearman_bhs": None,   # filled below for per-lang sets
+                "spearman_brs": None,   # filled below for per-lang sets
             }
 
-            # ---- Per-language Spearman on BHS vectors ----
+            # ---- Per-language Spearman on BRS vectors ----
             # Determine which language this set belongs to (if any)
             lang_of_set: str | None = None
             for l in langs:
@@ -652,33 +652,33 @@ def run_step4_comparison(
                     break
 
             if lang_of_set is not None:
-                v_bhs  = _load_variant_bhs(out_model_dir, variant, lang_of_set)
-                s4_bhs = _load_step4_bhs(model_short, lang_of_set)
-                if v_bhs is not None and s4_bhs is not None:
-                    rho = spearman_corr(v_bhs, s4_bhs)
-                    rec["spearman_bhs"] = round(rho, 6)
+                v_brs  = _load_variant_brs(out_model_dir, variant, lang_of_set)
+                s4_brs = _load_step4_brs(model_short, lang_of_set)
+                if v_brs is not None and s4_brs is not None:
+                    rho = spearman_corr(v_brs, s4_brs)
+                    rec["spearman_brs"] = round(rho, 6)
 
             records.append(rec)
 
-        # ---- General set: compute Spearman using average BHS over all langs ----
+        # ---- General set: compute Spearman using average BRS over all langs ----
         # (Find the General row already appended and fill spearman from avg vectors)
-        v_avg_bhs_arrays = [
-            _load_variant_bhs(out_model_dir, variant, l)
+        v_avg_brs_arrays = [
+            _load_variant_brs(out_model_dir, variant, l)
             for l in langs
-            if _load_variant_bhs(out_model_dir, variant, l) is not None
+            if _load_variant_brs(out_model_dir, variant, l) is not None
         ]
-        s4_avg_bhs_arrays = [
-            _load_step4_bhs(model_short, l)
+        s4_avg_brs_arrays = [
+            _load_step4_brs(model_short, l)
             for l in langs
-            if _load_step4_bhs(model_short, l) is not None
+            if _load_step4_brs(model_short, l) is not None
         ]
-        if v_avg_bhs_arrays and s4_avg_bhs_arrays:
-            v_avg  = np.mean(v_avg_bhs_arrays,  axis=0)
-            s4_avg = np.mean(s4_avg_bhs_arrays, axis=0)
+        if v_avg_brs_arrays and s4_avg_brs_arrays:
+            v_avg  = np.mean(v_avg_brs_arrays,  axis=0)
+            s4_avg = np.mean(s4_avg_brs_arrays, axis=0)
             rho_gen = spearman_corr(v_avg, s4_avg)
             for rec in records:
                 if rec["variant"] == variant and rec["set_name"] == "H_Bridge_General":
-                    rec["spearman_bhs"] = round(rho_gen, 6)
+                    rec["spearman_brs"] = round(rho_gen, 6)
 
     if not records:
         print("  No comparison records produced.")
@@ -690,7 +690,7 @@ def run_step4_comparison(
     col_order = [
         "model", "variant", "step4_formula", "set_name",
         "size_variant", "size_step4", "intersection", "union",
-        "jaccard", "spearman_bhs",
+        "jaccard", "spearman_brs",
     ]
     df = df[[c for c in col_order if c in df.columns]]
     df.to_csv(out_model_dir / "step4_comparison.csv", index=False)
@@ -698,7 +698,7 @@ def run_step4_comparison(
     # Print readable summary
     print()
     summary = df[["variant", "set_name", "size_variant", "size_step4",
-                  "intersection", "jaccard", "spearman_bhs"]].sort_values(
+                  "intersection", "jaccard", "spearman_brs"]].sort_values(
         ["variant", "set_name"]
     )
     print(summary.to_string(index=False))
@@ -1012,7 +1012,7 @@ def run_variant_ablation(
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Extra 4: alternative BHS formula variants and head-set Jaccard analysis."
+        description="Extra 3: alternative BRS formula variants and head-set Jaccard analysis."
     )
     p.add_argument(
         "--models", nargs="+",
@@ -1111,7 +1111,7 @@ def main() -> None:
     out_root: Path = args.output_dir if args.output_dir is not None else OUTPUT_ROOT
 
     print("=" * 70)
-    print("Extra 4 — BHS Formula Variants")
+    print("Extra 3 — BRS Formula Variants")
     print("=" * 70)
     print(f"  models    : {args.models}")
     print(f"  langs     : {args.langs}")

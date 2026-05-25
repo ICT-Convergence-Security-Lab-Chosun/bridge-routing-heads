@@ -1,7 +1,7 @@
 """Step 5: Bridge Head Ablation Filtering and Patchscopes Verification.
 
 Two-stage pipeline to refine the Bridge Head candidates produced by Step 4
-(BHS-based 1st-stage filtering):
+(BRS-based 1st-stage filtering):
 
   Stage 2 — Mean Ablation Filtering
     For each candidate head, replace its output with the calibration mean and
@@ -160,7 +160,7 @@ def parse_args() -> argparse.Namespace:
                    default=PROJECT_ROOT / "script" / "config" / "relation_templates.json",
                    help="Relation templates used to locate the r1_noun token.")
     p.add_argument("--step4-root", type=Path,
-                   default=PROJECT_ROOT / "output" / "step4_filtering_Bridge_head_Score",
+                   default=PROJECT_ROOT / "output" / "step4_filtering_Bridge_Routing_Score",
                    help="Root of step4 head_sets output.")
     p.add_argument("--step4-formula", default="fh+th-sh",
                    choices=["fh+th-sh", "th-fh-sh"],
@@ -1297,7 +1297,7 @@ def build_final_output(args: argparse.Namespace, logger) -> None:
         "model": args.model_short,
         "step4_formula": args.step4_formula,
         "pipeline": {
-            "stage1_bhs": "completed (see step4 output)",
+            "stage1_brs": "completed (see step4 output)",
             "stage2_ablation": {},
             "stage2_question_attention": {},
             "stage3_patchscopes": {},
@@ -1386,7 +1386,7 @@ def main() -> None:
     args = parse_args()
     set_seed(args.seed)
 
-    logger = setup_logging(f"step5_BHS_ablation_{args.model_short}", LOG_DIR)
+    logger = setup_logging(f"step5_BRS_ablation_{args.model_short}", LOG_DIR)
     logger.info("Step 5 — stage=%s  model=%s  langs=%s",
                 args.stage, args.model_short, args.langs)
 

@@ -36,11 +36,11 @@ EVAL_KEYS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Filter multilingual HoppingTooLate eval results.")
-    parser.add_argument("--model-short", required=True)  # Step 2에서 사용한 짧은 모델 이름
-    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es"])  # 필터링/교차 분류할 언어 코드 목록
-    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # Step 1 출력 데이터 루트
-    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data")  # Step 2 eval 및 Step 3 filtered 결과 루트
-    parser.add_argument("--seed", type=int, default=42)  # 재현성 metadata 기록 및 seed 고정용
+    parser.add_argument("--model-short", required=True)  # Short model name used in Step 2
+    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es"])  # List of language codes to filter/cross-classify
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # Root directory for Step 1 output data
+    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data")  # Root directory for Step 2 eval and Step 3 filtered results
+    parser.add_argument("--seed", type=int, default=42)  # Seed for reproducibility metadata recording
     return parser.parse_args()
 
 

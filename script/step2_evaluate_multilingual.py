@@ -29,29 +29,29 @@ LOG_DIR = PROJECT_ROOT / "logs"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate multilingual HoppingTooLate prompts.")
-    parser.add_argument("--model", required=True)  # HuggingFace model id 또는 로컬 모델 경로 ex) meta-llama/Llama-3.1-70B, Qwen/Qwen2.5-72B
-    parser.add_argument("--model-short", required=True)  # 출력 폴더/파일명에 사용할 짧은 모델 이름
-    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es"])  # 평가할 언어 코드 목록
-    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # Step 1 출력 데이터 루트
-    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data")  # eval/checkpoint 결과 저장 루트
-    parser.add_argument("--n-tokens", type=int, default=10)  # 각 prompt 뒤에 greedy decoding으로 생성할 토큰 수
-    parser.add_argument("--batch-size", type=int, default=512)  # 한 번에 평가할 record 수; 70B는 4~16부터 시도 권장
-    parser.add_argument("--gpu-index", type=int, default=0)  # 단일 GPU 실행 시 사용할 CUDA index
-    parser.add_argument("--device", default=None)  # 강제 실행 device; auto면 HF device_map='auto' 사용
-    parser.add_argument("--torch-dtype", default="auto")  # 모델 로드 dtype; auto/bfloat16/float16 등
-    parser.add_argument("--hf-token", default=None)  # gated/private 모델 접근용 HuggingFace token
-    parser.add_argument("--trust-remote-code", action="store_true")  # custom model code가 필요한 HF 모델에서 활성화
-    parser.add_argument("--checkpoint-every", type=int, default=1)  # checkpoint 저장 주기 표기용; 현재는 샘플마다 즉시 저장
-    parser.add_argument("--resume", action="store_true")  # 기존 checkpoint.jsonl에서 완료 id를 읽어 이어서 평가
+    parser.add_argument("--model", required=True)  # HuggingFace model id or local model path, e.g. meta-llama/Llama-3.1-70B, Qwen/Qwen2.5-72B
+    parser.add_argument("--model-short", required=True)  # Short model name used for output folder/file names
+    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es"])  # List of language codes to evaluate
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # Root directory for Step 1 output data
+    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data")  # Root directory for eval/checkpoint results
+    parser.add_argument("--n-tokens", type=int, default=10)  # Number of tokens to generate after each prompt via greedy decoding
+    parser.add_argument("--batch-size", type=int, default=512)  # Number of records to evaluate per batch; for 70B models start with 4-16
+    parser.add_argument("--gpu-index", type=int, default=0)  # CUDA device index to use for single-GPU runs
+    parser.add_argument("--device", default=None)  # Force a specific device; if auto, uses HF device_map='auto'
+    parser.add_argument("--torch-dtype", default="auto")  # dtype for model loading; auto/bfloat16/float16, etc.
+    parser.add_argument("--hf-token", default=None)  # HuggingFace token for accessing gated/private models
+    parser.add_argument("--trust-remote-code", action="store_true")  # Enable for HF models that require custom model code
+    parser.add_argument("--checkpoint-every", type=int, default=1)  # Checkpoint save frequency (currently saves immediately per sample)
+    parser.add_argument("--resume", action="store_true")  # Resume evaluation by reading completed IDs from the existing checkpoint.jsonl
     parser.add_argument(
         "--max-samples",
         "--max-sample",
         dest="max_samples",
         type=int,
         default=None,
-        help="언어별로 이번 실행에서 평가할 최대 샘플 수. 0이면 제한 없이 실행합니다. --resume 사용 시 checkpoint에 없는 pending 샘플에서 이어서 자릅니다.",
+        help="Maximum number of samples to evaluate per language in this run. 0 means no limit. When --resume is set, trims from the pending samples not yet in the checkpoint.",
     )
-    parser.add_argument("--seed", type=int, default=42)  # torch/random/numpy 재현성 제어용 seed
+    parser.add_argument("--seed", type=int, default=42)  # Seed for torch/random/numpy reproducibility
     args = parser.parse_args()
     if args.max_samples is not None and args.max_samples < 0:
         parser.error("--max-samples must be >= 0")
@@ -104,7 +104,7 @@ def evaluate_records_batch(
         for record in records
     ]
 
-    _printed_sample = True # 평가 프롬프트 샘플 출력 제어용 플래그
+    _printed_sample = True # Flag to control whether the eval prompt sample has been printed
     for _, prompt_key, answer_key, out_prefix in EVAL_SPECS:
         prompts = [
             wrap_prompt(record["prompts"][prompt_key], record["lang"])

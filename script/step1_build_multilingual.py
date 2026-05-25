@@ -18,18 +18,18 @@ LOG_DIR = PROJECT_ROOT / "logs"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build multilingual HoppingTooLate datasets.")
-    parser.add_argument("--source", type=Path, default=PROJECT_ROOT / "data/raw/two_hop.csv")  # 원본 HoppingTooLate two_hop CSV 경로
+    parser.add_argument("--source", type=Path, default=PROJECT_ROOT / "data/raw/two_hop.csv")  # Path to the original HoppingTooLate two_hop CSV
     parser.add_argument(
         "--templates",
         type=Path,
         default=PROJECT_ROOT / "script/config/relation_templates.json",
-    )  # relation별 언어 템플릿 JSON 경로
-    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es", "id", "vi", "hi"])  # 생성할 언어 코드 목록
-    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # 언어별 JSON 저장 루트
-    parser.add_argument("--cache-dir", type=Path, default=PROJECT_ROOT / "data/wikidata_cache")  # Wikidata label 캐시 저장 위치
-    parser.add_argument("--max-samples", type=int, default=None)  # 디버그/부분 실험용 최대 샘플 수
-    parser.add_argument("--sample-strategy", choices=["head", "random"], default="head")  # max-samples 적용 시 앞에서 자를지 무작위 샘플링할지 선택
-    parser.add_argument("--seed", type=int, default=42)  # 무작위 샘플링 및 재현성 제어용 seed
+    )  # Path to the per-relation language template JSON
+    parser.add_argument("--langs", nargs="+", default=["en", "ko", "zh", "ja", "es", "id", "vi", "hi"])  # List of language codes to generate
+    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data/processed")  # Root directory for per-language JSON output
+    parser.add_argument("--cache-dir", type=Path, default=PROJECT_ROOT / "data/wikidata_cache")  # Directory to cache Wikidata labels
+    parser.add_argument("--max-samples", type=int, default=None)  # Maximum number of samples for debug/partial runs
+    parser.add_argument("--sample-strategy", choices=["head", "random"], default="head")  # Whether to take the first N or randomly sample when --max-samples is set
+    parser.add_argument("--seed", type=int, default=42)  # Seed for random sampling and reproducibility
     return parser.parse_args()
 
 

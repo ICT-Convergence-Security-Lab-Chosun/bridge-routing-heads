@@ -6,7 +6,7 @@ Experiments are conducted on **LLaMA 3.1 70B** and **Qwen2.5 72B** across four n
 
 ---
 
-## What is a Bridge Head?
+## What is a Bridge Routing Head?
 
 In a 2-hop question (e.g. *"What is the capital of the country where [Person] was born?"*), the model must first retrieve an intermediate entity (e2, the country) before answering.  
 A **Bridge Head** is an attention head that plays a causal role in this intermediate retrieval step.

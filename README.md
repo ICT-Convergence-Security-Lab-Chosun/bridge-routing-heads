@@ -1,4 +1,4 @@
-# xhop-bridge-heads
+# bridge-routing-heads
 
 Identifying **language-general and language-specific Bridge Heads** — attention heads that mediate the retrieval of intermediate bridge entities in cross-lingual multi-hop reasoning.
 

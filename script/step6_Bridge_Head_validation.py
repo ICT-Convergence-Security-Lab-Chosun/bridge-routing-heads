@@ -12,7 +12,9 @@ Stage 2 -- Mean ablation
     Calibration: 50 correct two-hop prompts x (en + ko/ja/zh/es) -> mean head outputs.
     Gold for NLL: clean span extracted from eval.two_hop_pred.
     Test: 100 correct records per language, ablate general set and specific set separately.
-    Compare against random-sampled head set of equal size (20 repeats).
+    Compare against layer-matched random head set of equal size (20 repeats):
+    for each bridge head (L, H), the random pool draws from the same layer L
+    excluding bridge heads, falling back to other bridge-head layers if needed.
 
 Stage 3 -- Scaling amplification
     Language-specific heads only (per lang).
@@ -148,10 +150,53 @@ def load_final_bridge_heads(step5_dir: Path, model_short: str) -> dict[str, Any]
     }
 
 
-def _all_model_heads(model) -> list[tuple[int, int]]:
-    n_layers = _get_num_layers(model)
-    n_heads = _get_num_heads(model)
-    return [(l, h) for l in range(n_layers) for h in range(n_heads)]
+def sample_layer_matched_heads(
+    bridge_heads: list[tuple[int, int]],
+    n_heads: int,
+    rng: random.Random,
+) -> list[tuple[int, int]]:
+    """Sample k = len(bridge_heads) heads, one per bridge head, from the same layer.
+
+    For each bridge head (L, H), eligible candidates are all heads in layer L
+    that are NOT in the bridge set.
+
+    Fallback (layer fully covered by bridge heads):
+        Pick from other layers that contain bridge heads but still have at
+        least one non-bridge head available.
+
+    Final fallback (all bridge-head layers fully covered):
+        Pick from the entire bridge-head layer pool ignoring exclusions.
+    """
+    bridge_set = set(bridge_heads)
+    bridge_by_layer: dict[int, set[int]] = {}
+    for (l, h) in bridge_set:
+        bridge_by_layer.setdefault(l, set()).add(h)
+
+    candidates_by_layer: dict[int, list[int]] = {
+        l: [h for h in range(n_heads) if h not in bh_set]
+        for l, bh_set in bridge_by_layer.items()
+    }
+
+    # Cross-layer fallback pool: pairs from bridge-head layers that still
+    # have at least one non-bridge head.
+    fallback_pool: list[tuple[int, int]] = [
+        (l, h)
+        for l, cands in candidates_by_layer.items()
+        for h in cands
+    ]
+
+    result: list[tuple[int, int]] = []
+    for (layer, _head) in bridge_heads:
+        cands = candidates_by_layer.get(layer, [])
+        if cands:
+            result.append((layer, rng.choice(cands)))
+        elif fallback_pool:
+            result.append(rng.choice(fallback_pool))
+        else:
+            any_pool = [(l, h) for l, bh in bridge_by_layer.items()
+                        for h in range(n_heads)]
+            result.append(rng.choice(any_pool))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +381,6 @@ def run_mean_ablation(
     n_layers = _get_num_layers(model)
     n_heads = _get_num_heads(model)
     head_dim = _get_head_dim(model)
-    all_heads = _all_model_heads(model)
 
     # Calibration: gather mean head outputs from correct two-hop prompts
     # 50 per lang x (en + ko/ja/zh/es) = up to 250 prompts.
@@ -428,11 +472,11 @@ def run_mean_ablation(
                     "delta_nll_ci_hi": bth_ci_hi,
                 })
 
-                # Random baseline (same k, --random-repeat repeats)
+                # Layer-matched random baseline (same k, --random-repeat repeats)
                 rand_deltas: list[float] = []
                 rand_per_item_all: list[dict[str, Any]] = []
                 for repeat_i in range(args.random_repeat):
-                    rand_set = rng.sample(all_heads, k=min(k, len(all_heads)))
+                    rand_set = sample_layer_matched_heads(head_set, n_heads, rng)
                     r_nlls, r_per_item = _ablation_nlls(
                         model, tokenizer, items, rand_set, mean_values, mask_mgr
                     )
@@ -453,7 +497,7 @@ def run_mean_ablation(
                     "model": args.model_short,
                     "lang": lang,
                     "head_set_type": head_set_type,
-                    "baseline_type": "random",
+                    "baseline_type": "layer_matched_random",
                     "intervention": "mean_ablation",
                     "k": k,
                     "sample_size": len(items),

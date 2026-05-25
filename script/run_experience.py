@@ -18,9 +18,9 @@ COMMANDS = [
     # "python script/step2_evaluate_multilingual.py --model Qwen/Qwen2.5-72B --model-short qwen25_72",
     # "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type attn",
 
-    "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type mlp --lang-pairs ja-es es-en es-ja es-ko es-zh", # ja -> es 부터 다시 시작해야 함
-    "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type attn",
-    "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type mlp",
+    # "python script/step2_5_activation_patching.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --patch-type mlp --lang-pairs ja-es es-en es-ja es-ko es-zh", # ja -> es 부터 다시 시작해야 함
+    # "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type attn",
+    # "python script/step2_5_activation_patching.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --patch-type mlp",
 
     # "python script/step3_filter_multilingual.py --model-short llama31_70",
     # "python script/step3_filter_multilingual.py --model-short qwen25_72",
@@ -31,6 +31,12 @@ COMMANDS = [
     # "python script/extra/extra_1_suppressor_ablation.py",
     # "python script/step6_Bridge_Head_validation.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es --stage ablation",
     # "python script/step6_Bridge_Head_validation.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es --stage ablation",   
+    # "python script/extra/extra3_layer_matched_ablation.py --model-short llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es",
+    # "python script/extra/extra3_layer_matched_ablation.py --model-short qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es",
+    # "python script/extra/extra_2_stronger_filtering.py --models llama31_70 qwen25_72 --langs ko zh ja es --metric successes --min-successes 4"
+    # "python script/extra/extra_4_bhs_variants.py"
+    "python script/extra/extra_4_bhs_variants.py --stage ablation --models llama31_70 --model meta-llama/Llama-3.1-70B --langs ko zh ja es",
+    "python script/extra/extra_4_bhs_variants.py --stage ablation --models qwen25_72 --model Qwen/Qwen2.5-72B --langs ko zh ja es",
 ]
 
 

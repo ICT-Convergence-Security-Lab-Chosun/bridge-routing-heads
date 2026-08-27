@@ -26,6 +26,13 @@ Stage 4 -- Cross-lingual transfer accuracy
     Data: en_correct_{lang}_incorrect_{model}.json.
     base_acc = 0 by construction; report amplified accuracy and delta.
 
+Stages 3 & 4 support ``--head-selection {bridge, random}``: "bridge" (default)
+amplifies the actual Bridge Head set; "random" amplifies a same-size set of
+uniformly random (layer, head) pairs instead, to see how amplification
+behaves for a non-bridge control group. Random-selection outputs are written
+to separate files (suffixed ``_random_heads``) so they never overwrite the
+original bridge-head results.
+
 Usage examples
 --------------
 # All stages
@@ -42,6 +49,11 @@ python script/step6_Bridge_Head_validation.py \
 python script/step6_Bridge_Head_validation.py \
     --model-short qwen25_72 --model Qwen/Qwen2.5-72B \
     --langs ko zh ja es --stage scaling --scaling-max-sample 100
+
+# Stage 3/4 with a random (non-bridge) head group of the same size, for comparison
+python script/step6_Bridge_Head_validation.py \
+    --model-short qwen25_72 --model Qwen/Qwen2.5-72B \
+    --langs ko zh ja es --stage all --head-selection random
 """
 
 from __future__ import annotations
@@ -113,6 +125,13 @@ def parse_args() -> argparse.Namespace:
                         "when data < N).")
     p.add_argument("--alpha-list", nargs="+", type=float, default=[0.25, 0.5, 1.0],
                    help="Alpha values for scaling amplification.")
+    p.add_argument("--head-selection", default="bridge",
+                   choices=["bridge", "random"],
+                   help="Head group used for amplification in Stage 3 & 4 (default: bridge). "
+                        "'bridge' amplifies the actual Bridge Head set; 'random' amplifies a "
+                        "same-size set of uniformly random (layer, head) pairs instead, drawn "
+                        "fresh per lang/target. Random-mode outputs are saved to separate files "
+                        "and never overwrite 'bridge' results.")
 
     # Stage 4: cross-lingual transfer
     p.add_argument("--cross-lingual-root", type=Path,
@@ -197,6 +216,28 @@ def sample_layer_matched_heads(
                         for h in range(n_heads)]
             result.append(rng.choice(any_pool))
     return result
+
+
+def sample_random_head_set(
+    head_set: list[tuple[int, int]],
+    n_layers: int,
+    n_heads: int,
+    rng: random.Random,
+) -> list[tuple[int, int]]:
+    """Sample k = len(head_set) uniformly random (layer, head) pairs.
+
+    Unlike ``sample_layer_matched_heads`` (Stage 2's layer-matched control),
+    this draws from the entire model with no layer constraint -- used as a
+    plain random-head control for Stage 3/4 amplification. The original
+    ``head_set`` itself is excluded from the draw pool so the control is
+    guaranteed to be a different group.
+    """
+    k = len(head_set)
+    exclude = set(head_set)
+    pool = [(l, h) for l in range(n_layers) for h in range(n_heads) if (l, h) not in exclude]
+    if len(pool) < k:
+        pool = [(l, h) for l in range(n_layers) for h in range(n_heads)]
+    return rng.sample(pool, k)
 
 
 # ---------------------------------------------------------------------------
@@ -546,6 +587,17 @@ def run_scaling_amplification(
     n_heads = _get_num_heads(model)
     head_dim = _get_head_dim(model)
 
+    head_selection = getattr(args, "head_selection", "bridge")
+    if head_selection == "random":
+        rng = random.Random(f"{args.seed}-scaling-{lang}")
+        amp_heads = sample_random_head_set(specific_heads, n_layers, n_heads, rng)
+        logger.info(
+            "Scaling lang=%s: using RANDOM head set (k=%d) instead of specific heads.",
+            lang, len(amp_heads),
+        )
+    else:
+        amp_heads = specific_heads
+
     try:
         records = load_incorrect_records(args.input_root, args.model_short, lang)
     except FileNotFoundError:
@@ -576,7 +628,7 @@ def run_scaling_amplification(
             correct = 0
             for item_i, item in enumerate(items, 1):
                 mask_mgr.reset_masks()
-                mask_mgr.apply_head_set_scaling(specific_heads, alpha)
+                mask_mgr.apply_head_set_scaling(amp_heads, alpha)
                 pred = predict_next_tokens(
                     model, tokenizer, item["prompt"], n_tokens=args.n_generate_tokens
                 )
@@ -594,16 +646,17 @@ def run_scaling_amplification(
                 "model": args.model_short,
                 "lang": lang,
                 "head_set_type": "specific",
+                "head_selection": head_selection,
                 "intervention": "scaling",
                 "alpha": alpha,
-                "k": len(specific_heads),
+                "k": len(amp_heads),
                 "n_items": len(items),
                 "n_correct": correct,
                 "amplified_accuracy": acc,
             })
             logger.info(
-                "Scaling lang=%-4s  alpha=%.2f  amplified_acc=%.4f  (%d/%d)",
-                lang, alpha, acc, correct, len(items),
+                "Scaling lang=%-4s  alpha=%.2f  head_selection=%s  amplified_acc=%.4f  (%d/%d)",
+                lang, alpha, head_selection, acc, correct, len(items),
             )
 
     return results
@@ -658,6 +711,17 @@ def run_transfer_accuracy(
     n_heads = _get_num_heads(model)
     head_dim = _get_head_dim(model)
 
+    head_selection = getattr(args, "head_selection", "bridge")
+    if head_selection == "random":
+        rng = random.Random(f"{args.seed}-transfer-{tgt_lang}")
+        amp_heads = sample_random_head_set(general_heads, n_layers, n_heads, rng)
+        logger.info(
+            "Transfer tgt_lang=%s: using RANDOM head set (k=%d) instead of general heads.",
+            tgt_lang, len(amp_heads),
+        )
+    else:
+        amp_heads = general_heads
+
     items: list[dict] = []
     for rec in records:
         lang_data = rec["langs"].get(tgt_lang)
@@ -682,7 +746,7 @@ def run_transfer_accuracy(
             correct = 0
             for item_i, item in enumerate(items, 1):
                 mask_mgr.reset_masks()
-                mask_mgr.apply_head_set_scaling(general_heads, alpha)
+                mask_mgr.apply_head_set_scaling(amp_heads, alpha)
                 pred = predict_next_tokens(
                     model, tokenizer, item["prompt"], n_tokens=args.n_generate_tokens
                 )
@@ -700,9 +764,10 @@ def run_transfer_accuracy(
                 "model": args.model_short,
                 "tgt_lang": tgt_lang,
                 "head_set_type": "general",
+                "head_selection": head_selection,
                 "intervention": "scaling",
                 "alpha": alpha,
-                "k": len(general_heads),
+                "k": len(amp_heads),
                 "n_items": len(items),
                 "n_correct": correct,
                 "base_accuracy": 0.0,
@@ -710,8 +775,8 @@ def run_transfer_accuracy(
                 "acc_delta": acc,
             })
             logger.info(
-                "Transfer tgt_lang=%-4s  alpha=%.2f  amplified_acc=%.4f  (%d/%d)",
-                tgt_lang, alpha, acc, correct, len(items),
+                "Transfer tgt_lang=%-4s  alpha=%.2f  head_selection=%s  amplified_acc=%.4f  (%d/%d)",
+                tgt_lang, alpha, head_selection, acc, correct, len(items),
             )
 
     return results
@@ -727,8 +792,8 @@ def main() -> None:
 
     logger = setup_logging(f"step6_Bridge_Head_validation_{args.model_short}", LOG_DIR)
     logger.info(
-        "Step 6 -- model=%s  langs=%s  stage=%s",
-        args.model_short, args.langs, args.stage,
+        "Step 6 -- model=%s  langs=%s  stage=%s  head_selection=%s",
+        args.model_short, args.langs, args.stage, args.head_selection,
     )
 
     step5_dir = args.step5_root
@@ -769,6 +834,11 @@ def main() -> None:
     all_scaling: list[dict] = []
     all_transfer: list[dict] = []
 
+    # Stage 3/4 outputs get a distinct filename suffix when amplifying a random
+    # (non-bridge) head group, so they never overwrite the original bridge-head
+    # results on disk.
+    head_sel_suffix = "" if args.head_selection == "bridge" else "_random_heads"
+
     # Stage 2: Mean Ablation
     if args.stage in ("ablation", "all"):
         logger.info("=== Stage 2: Mean Ablation ===")
@@ -790,7 +860,7 @@ def main() -> None:
                     lang, args, model, tokenizer, bridge_heads, out_dir, logger
                 )
                 all_scaling.extend(amp)
-                _save_results(amp, out_dir / "scaling_results")
+                _save_results(amp, out_dir / f"scaling_results{head_sel_suffix}")
             except Exception as exc:
                 logger.error("Scaling failed for lang=%s: %s", lang, exc, exc_info=True)
 
@@ -808,7 +878,7 @@ def main() -> None:
                     tgt_lang, args, model, tokenizer, bridge_heads, logger
                 )
                 all_transfer.extend(tr)
-                _save_results(tr, out_dir / f"transfer_accuracy_en2{tgt_lang}")
+                _save_results(tr, out_dir / f"transfer_accuracy_en2{tgt_lang}{head_sel_suffix}")
             except Exception as exc:
                 logger.error("Transfer failed for tgt_lang=%s: %s", tgt_lang, exc, exc_info=True)
 
@@ -816,10 +886,12 @@ def main() -> None:
     if all_ablation:
         pd.DataFrame(all_ablation).to_csv(summary_dir / "ablation_all_langs.csv", index=False)
     if all_scaling:
-        pd.DataFrame(all_scaling).to_csv(summary_dir / "scaling_all_langs.csv", index=False)
+        pd.DataFrame(all_scaling).to_csv(
+            summary_dir / f"scaling_all_langs{head_sel_suffix}.csv", index=False
+        )
     if all_transfer:
         pd.DataFrame(all_transfer).to_csv(
-            summary_dir / "transfer_accuracy_all_langs.csv", index=False
+            summary_dir / f"transfer_accuracy_all_langs{head_sel_suffix}.csv", index=False
         )
 
     summary = {
@@ -830,6 +902,7 @@ def main() -> None:
         "ablation_sample_size": args.ablation_sample_size,
         "calibration_size": args.calibration_size,
         "scaling_max_sample": args.scaling_max_sample,
+        "head_selection": args.head_selection,
         "n_general_heads": len(bridge_heads["general"]),
         "n_specific_heads": {k: len(v) for k, v in bridge_heads["specific"].items()},
         "n_jaccard_pairs": len(jaccard_results),
@@ -837,7 +910,7 @@ def main() -> None:
         "n_scaling_records": len(all_scaling),
         "n_transfer_records": len(all_transfer),
     }
-    save_json(summary, summary_dir / "validation_summary.json")
+    save_json(summary, summary_dir / f"validation_summary{head_sel_suffix}.json")
     logger.info(
         "Step 6 complete.  jaccard=%d  ablation=%d  scaling=%d  transfer=%d",
         len(jaccard_results), len(all_ablation), len(all_scaling), len(all_transfer),

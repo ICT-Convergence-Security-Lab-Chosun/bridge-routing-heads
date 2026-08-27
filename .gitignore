@@ -36,16 +36,7 @@ output_backup2/
 # Processed multilingual JSONs are ~95 MB each (653 MB total).
 # Use Git LFS or upload to HuggingFace Datasets instead.
 # ============================================================
-data/processed/
-data/processed_backup/
-data/processed_backup2/
-
-# Per-model inference results (eval / filtered outputs)
-data/llama31_70/
-data/qwen25_72/
-
-# Wikidata API cache (regeneratable via step1)
-data/wikidata_cache/
+data/
 
 # ============================================================
 # Deprecated / scratch scripts

@@ -157,37 +157,58 @@ def parse_args() -> argparse.Namespace:
 # Scoring (GPU step)
 # ---------------------------------------------------------------------------
 
-def run_scoring_condition(condition: str, args: argparse.Namespace, logger) -> None:
-    """Compute item × head gradient importance scores for one condition (FH / TH / SH)."""
+def run_scoring_condition(
+    condition: str,
+    args: argparse.Namespace,
+    logger,
+    model=None,
+    tokenizer=None,
+):
+    """Compute item × head gradient importance scores for one condition (FH / TH / SH).
+
+    Accepts an already-loaded (model, tokenizer) and returns them so the caller
+    reuses ONE model across FH/TH/SH. Loading a fresh 70B copy per condition
+    (old behaviour) leaves the previous copy's CUDA memory reserved, so the
+    second load gets offloaded to CPU/meta by accelerate and forwards crash
+    with 'Tensor on device meta'. The model is loaded lazily, only when at
+    least one language still needs scoring."""
     meta = _COND_META[condition]
     prompt_key = meta["prompt_key"]
     pred_key = meta["pred_key"]
 
-    if not args.model:
-        raise ValueError("--model is required for scoring conditions.")
+    # Determine remaining work before touching the GPU.
+    pending_langs = []
+    for lang in args.langs:
+        out_path = args.output_root / args.model_short / lang / f"scores_{condition}_{lang}.parquet"
+        if out_path.exists():
+            logger.info("Skipping %s %s — already exists.", condition, lang)
+        else:
+            pending_langs.append(lang)
+    if not pending_langs:
+        return model, tokenizer
 
-    logger.info("Loading model: %s", args.model)
-    model, tokenizer = load_model_and_tokenizer(
-        args.model,
-        device="auto",
-        torch_dtype=args.torch_dtype,
-        hf_token=args.hf_token,
-        trust_remote_code=args.trust_remote_code,
-        attn_implementation="eager",
-    )
+    if model is None:
+        if not args.model:
+            raise ValueError("--model is required for scoring conditions.")
+        logger.info("Loading model: %s", args.model)
+        model, tokenizer = load_model_and_tokenizer(
+            args.model,
+            device="auto",
+            torch_dtype=args.torch_dtype,
+            hf_token=args.hf_token,
+            trust_remote_code=args.trust_remote_code,
+            attn_implementation="eager",
+        )
 
     n_layers = _get_num_layers(model)
     n_heads  = _get_num_heads(model)
     head_dim = _get_head_dim(model)
     logger.info("Model layers=%d  heads=%d  head_dim=%d", n_layers, n_heads, head_dim)
 
-    for lang in args.langs:
+    for lang in pending_langs:
         out_dir = args.output_root / args.model_short / lang
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"scores_{condition}_{lang}.parquet"
-        if out_path.exists():
-            logger.info("Skipping %s %s — already exists.", condition, lang)
-            continue
 
         records = load_filtered_records(args.input_root, args.model_short, lang)
         records = sample_records(records, args.sample_size, args.seed)
@@ -228,6 +249,8 @@ def run_scoring_condition(condition: str, args: argparse.Namespace, logger) -> N
         matrix = np.stack(score_rows, axis=0).astype(np.float32)
         save_scores_matrix(matrix, item_ids, n_layers, n_heads, out_path)
         logger.info("Saved: %s", out_path)
+
+    return model, tokenizer
 
 
 # ---------------------------------------------------------------------------
@@ -533,10 +556,14 @@ def main() -> None:
     elif args.condition == "aggregate-only":
         run_aggregation(args, logger)
     else:
-        # Single-machine mode: all three conditions then aggregate
+        # Single-machine mode: all three conditions then aggregate.
+        # One model instance is loaded lazily and shared across conditions --
+        # re-loading per condition would double-book GPU memory and push the
+        # second copy onto CPU/meta (accelerate offload) on 80GB cards.
+        model = tokenizer = None
         for cond in ("FH", "TH", "SH"):
             logger.info("=== Scoring: %s ===", cond)
-            run_scoring_condition(cond, args, logger)
+            model, tokenizer = run_scoring_condition(cond, args, logger, model, tokenizer)
         logger.info("=== Aggregation ===")
         run_aggregation(args, logger)
 

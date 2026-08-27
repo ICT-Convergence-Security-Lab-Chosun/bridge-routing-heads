@@ -1,0 +1,24 @@
+# bridge-routing-heads project dependencies
+# Install with: pip install -r requirements.txt
+#
+# NOTE on torch: this pins a minimum version only. If you need a specific
+# CUDA build (e.g. cu121/cu124/cu130), install torch first from the matching
+# index (https://pytorch.org/get-started/locally/) before running this file,
+# or pip will pull the default PyPI CUDA build.
+
+torch>=2.2.0
+transformers>=4.43.0
+transformer_lens>=1.19.0
+accelerate>=0.30.0
+numpy>=1.26.0
+pandas>=2.0.0
+scipy>=1.11.0
+tqdm>=4.66.0
+requests>=2.31.0
+
+# MMLU eval (extra_4_amplification_general_perf.py, --stage mmlu_*)
+datasets>=2.18.0
+
+# Tokenizer backends (some HF checkpoints require these even with fast tokenizers)
+sentencepiece>=0.1.99
+protobuf>=4.25.0

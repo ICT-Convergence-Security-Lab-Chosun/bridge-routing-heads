@@ -8,6 +8,21 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from utils.common import unique_nonempty
 
+# Models at/above this parameter count (in billions) are sharded across GPUs via
+# device_map="auto" instead of being loaded onto a single device. Parsed from the
+# model name's size tag (e.g. 70B, 72B, 405B) so it is not tied to one string.
+_SHARD_MIN_BILLIONS = 40.0
+
+
+def _model_size_billions(model_name: str) -> float:
+    """Best-effort parameter count (billions) parsed from the model name, else 0."""
+    sizes = re.findall(r"(\d+(?:\.\d+)?)\s*b\b", model_name.lower())
+    return max((float(s) for s in sizes), default=0.0)
+
+
+def _should_shard(model_name: str, device: str) -> bool:
+    return device == "auto" or _model_size_billions(model_name) >= _SHARD_MIN_BILLIONS
+
 
 def load_model_and_tokenizer(
     model_name: str,
@@ -33,7 +48,7 @@ def load_model_and_tokenizer(
         "trust_remote_code": trust_remote_code,
         **model_extra_kwargs,
     }
-    if "70b" in model_name.lower() or device == "auto":
+    if _should_shard(model_name, device):
         model_kwargs["device_map"] = "auto"
         model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     else:

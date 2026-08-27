@@ -30,6 +30,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-samples", type=int, default=None)  # Maximum number of samples for debug/partial runs
     parser.add_argument("--sample-strategy", choices=["head", "random"], default="head")  # Whether to take the first N or randomly sample when --max-samples is set
     parser.add_argument("--seed", type=int, default=42)  # Seed for random sampling and reproducibility
+    parser.add_argument(
+        "--entity-prompt-label",
+        choices=["english", "localized"],
+        default="english",
+        help="Which entity label to place in the prompt text. 'english' (default) keeps "
+             "the original English source-entity anchor for e1/e2. 'localized' uses the "
+             "target-language Wikidata label (English fallback when none exists) -- used to "
+             "test whether general Bridge Heads still emerge without the English anchor.",
+    )  # Entity anchor in prompts: english (original) or localized (target-language)
     return parser.parse_args()
 
 
@@ -137,6 +146,12 @@ def main() -> None:
         )
     label_map = batch_get_labels(all_qids, args.langs, resolve_cache_file(args.cache_dir), logger=logger)
 
+    localized_prompts = args.entity_prompt_label == "localized"
+    # Coverage: per language, how many e1/e2 got a genuine localized label (!= English).
+    loc_cov: dict[str, dict[str, int]] = {
+        lang: {"e1_localized": 0, "e2_localized": 0, "n": 0} for lang in args.langs
+    }
+
     lang_records: dict[str, list[dict[str, Any]]] = {lang: [] for lang in args.langs}
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Build records"):
         e1_qid, e2_qid, e3_qid = _qid(row, "e1"), _qid(row, "e2"), _qid(row, "e3")
@@ -148,6 +163,16 @@ def main() -> None:
             e1_label = _label_for(label_map, e1_qid, lang, e1_en)
             e2_label = _label_for(label_map, e2_qid, lang, e2_en)
             e3_label = _label_for(label_map, e3_qid, lang, e3_en)
+
+            loc_cov[lang]["n"] += 1
+            if e1_label != e1_en:
+                loc_cov[lang]["e1_localized"] += 1
+            if e2_label != e2_en:
+                loc_cov[lang]["e2_localized"] += 1
+
+            # Anchor in the prompt: English (original) or localized target-language label.
+            e1_prompt = e1_label if localized_prompts else e1_en
+            e2_prompt = e2_label if localized_prompts else e2_en
             prompts = build_prompts_for_lang(
                 r1=r1,
                 r2=r2,
@@ -155,8 +180,8 @@ def main() -> None:
                 e2_label=e2_label,
                 templates=templates,
                 lang=lang,
-                e1_prompt_label=e1_en,
-                e2_prompt_label=e2_en,
+                e1_prompt_label=e1_prompt,
+                e2_prompt_label=e2_prompt,
             )
 
             lang_records[lang].append(
@@ -180,12 +205,28 @@ def main() -> None:
                 }
             )
 
+    # Localization coverage report (fraction of e1/e2 with a genuine target-language label).
+    coverage = {
+        lang: {
+            "n": c["n"],
+            "e1_localized_frac": (c["e1_localized"] / c["n"]) if c["n"] else 0.0,
+            "e2_localized_frac": (c["e2_localized"] / c["n"]) if c["n"] else 0.0,
+        }
+        for lang, c in loc_cov.items()
+    }
+    logger.info("entity_prompt_label=%s  localization coverage:", args.entity_prompt_label)
+    for lang, c in coverage.items():
+        logger.info("  %-3s  e1=%.1f%%  e2=%.1f%%  (n=%d)",
+                    lang, 100 * c["e1_localized_frac"], 100 * c["e2_localized_frac"], c["n"])
+
     metadata = build_metadata(
         "step1_build_multilingual",
         args,
         total_raw=total_source_rows,
         total_written={lang: len(records) for lang, records in lang_records.items()},
         cache_file=str(resolve_cache_file(args.cache_dir)),
+        entity_prompt_label=args.entity_prompt_label,
+        localization_coverage=coverage,
     )
     for lang, records in lang_records.items():
         out_path = args.output_dir / lang / f"two_hop_{lang}.json"
